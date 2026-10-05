@@ -1,8 +1,8 @@
 /**
- * One shared Raycaster on the interactable layer, doc 05 sections 2 and 3.1 (M6).
+ * One shared Raycaster on the interactable layer, doc 05 sections 2 and 3.1 (M5 grab, M6 hover).
  * Raycast at most once per frame; budget 1 ms (doc 05 section 10).
  */
-import type { Camera, Intersection, Object3D } from "three";
+import { Raycaster, Vector2, type Camera, type Intersection, type Object3D } from "three";
 import type { Ndc } from "./coords";
 
 /** Three.js layer index reserved for interactable meshes and hotspot markers. */
@@ -24,5 +24,26 @@ export type InteractableRaycaster = {
 };
 
 export function createInteractableRaycaster(): InteractableRaycaster {
-  throw new Error("TODO Phase D: createInteractableRaycaster (doc 05, M6)");
+  const raycaster = new Raycaster();
+  raycaster.layers.set(INTERACTABLE_LAYER);
+  const ndcVec = new Vector2();
+  const none: InteractableHit = { componentId: null, hotspotId: null, isGrabbable: false, intersection: null };
+
+  return {
+    hit(ndc, camera, interactables) {
+      raycaster.setFromCamera(ndcVec.set(ndc.x, ndc.y), camera);
+      for (const intersection of raycaster.intersectObjects(interactables, true)) {
+        for (let o: Object3D | null = intersection.object; o; o = o.parent) {
+          const { componentId, hotspotId, grabbable } = o.userData as {
+            componentId?: string;
+            hotspotId?: string;
+            grabbable?: boolean;
+          };
+          if (componentId) return { componentId, hotspotId: null, isGrabbable: !!grabbable, intersection };
+          if (hotspotId) return { componentId: null, hotspotId, isGrabbable: false, intersection };
+        }
+      }
+      return none;
+    },
+  };
 }

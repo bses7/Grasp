@@ -1,5 +1,5 @@
 /**
- * Coordinate chain, doc 05 section 2 (M6).
+ * Coordinate chain, doc 05 section 2 (M5 mouse with an identity viewport, M6 camera cursor).
  * cursor (mirrored, normalized video coords) → cover-fit onto canvas → clamp → NDC.
  * Mirroring (u = 1 - x) is done by the CV layer; this file assumes an already
  * mirrored cursor. See doc 05 open question 2.
@@ -28,11 +28,23 @@ export type Viewport = {
 };
 
 /** Cover-fit the cursor onto the canvas and clamp to 0..1. */
-export function coverFit(_cursor: Cursor, _viewport: Viewport): { u: number; v: number } {
-  throw new Error("TODO Phase D: coverFit (doc 05, M6)");
+export function coverFit(cursor: Cursor, viewport: Viewport): { u: number; v: number } {
+  // Fraction of the video visible on each axis once it covers the canvas (the rest is cropped).
+  const visX = Math.min(1, viewport.canvasAspect / viewport.videoAspect);
+  const visY = Math.min(1, viewport.videoAspect / viewport.canvasAspect);
+  let u = (cursor.x - (1 - visX) / 2) / visX;
+  let v = (cursor.y - (1 - visY) / 2) / visY;
+  u = 0.5 + (u - 0.5) * viewport.reachScale;
+  v = 0.5 + (v - 0.5) * viewport.reachScale;
+  return { u: clamp01(u), v: clamp01(v) };
+}
+
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
 }
 
 /** Full chain: cover-fit, clamp, then ndc.x = 2u - 1, ndc.y = 1 - 2v. */
-export function landmarkToNdc(_cursor: Cursor, _viewport: Viewport): Ndc {
-  throw new Error("TODO Phase D: landmarkToNdc (doc 05, M6)");
+export function landmarkToNdc(cursor: Cursor, viewport: Viewport): Ndc {
+  const { u, v } = coverFit(cursor, viewport);
+  return { x: 2 * u - 1, y: 1 - 2 * v };
 }

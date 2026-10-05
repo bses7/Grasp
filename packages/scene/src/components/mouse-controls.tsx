@@ -1,11 +1,9 @@
 /**
- * Mouse and keyboard equivalents, doc 05 section 7 (M5).
- * Both input modes produce the same InteractionEvent stream through the
- * InputSource adapter in apps/web; the scene has one code path. This file owns
- * the key map and the in-canvas focus handling (Tab order follows
- * manifest.components; announcements go through the HUD live region).
+ * Keyboard map, doc 05 section 7. LessonScene implements the M5 subset (Tab, Space/Enter, arrows)
+ * by synthesizing the same InteractionEvents the mouse and gesture paths send, so the scene has one
+ * code path. The mouse itself is `createMouseAdapter` in @grasp/vision. Remaining keys arrive with
+ * their features (reset M8, dolly and explode Phase 4, rotate V1).
  */
-import type { InteractionEvent } from "@grasp/types";
 
 /** Keyboard bindings. Values are KeyboardEvent.key or "wheel". */
 export const KEY_MAP = {
@@ -31,16 +29,3 @@ export const KEY_MAP = {
 } as const;
 
 export type KeyAction = keyof typeof KEY_MAP;
-
-export type MouseControlsProps = {
-  /** Ordered ids for Tab focus; from manifest.components then hotspots. */
-  focusOrder: readonly string[];
-  enabled: boolean;
-  allowDolly: boolean;
-  /** Emits the identical events the gesture path emits. */
-  onInteractionEvent: (event: InteractionEvent) => void;
-};
-
-export function MouseControls(_props: MouseControlsProps) {
-  throw new Error("TODO Phase D: MouseControls (doc 05, M5)");
-}

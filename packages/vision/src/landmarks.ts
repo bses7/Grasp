@@ -3,6 +3,7 @@
  * Formulas: mediapipe-hands skill section 5; doc 04 "Gesture detection pseudocode".
  * Landmarks exist only in worker memory for the current frame; nothing here persists them.
  */
+import { VISION_CONSTANTS } from "./constants";
 
 export enum Landmark {
   WRIST = 0,
@@ -49,15 +50,26 @@ export function pinchDist(l: HandLandmarks): number {
 
 /** Tip farther from wrist than PIP by FINGER_EXTENDED_RATIO. */
 export function fingerExtended(l: HandLandmarks, finger: Finger): boolean {
-  void l;
-  void finger;
-  throw new Error("TODO Phase D: fingerExtended (doc 04, M2)");
+  const [pip, tip] = FINGER_JOINTS[finger];
+  const wrist = l[Landmark.WRIST]!;
+  return dist2(l[tip]!, wrist) > dist2(l[pip]!, wrist) * VISION_CONSTANTS.FINGER_EXTENDED_RATIO;
+}
+
+const FINGER_JOINTS: Record<Finger, [Landmark, Landmark]> = {
+  index: [Landmark.INDEX_PIP, Landmark.INDEX_TIP],
+  middle: [Landmark.MIDDLE_PIP, Landmark.MIDDLE_TIP],
+  ring: [Landmark.RING_PIP, Landmark.RING_TIP],
+  pinky: [Landmark.PINKY_PIP, Landmark.PINKY_TIP],
+};
+
+/** Thumb tip far from the pinky MCP: dist2(l[4], l[17]) / handSize > THUMB_EXTENDED_RATIO. */
+export function thumbExtended(l: HandLandmarks): boolean {
+  return dist2(l[Landmark.THUMB_TIP]!, l[Landmark.PINKY_MCP]!) / handSize(l) > VISION_CONSTANTS.THUMB_EXTENDED_RATIO;
 }
 
 /** Count of index..pinky extended (0..4). */
 export function extendedCount(l: HandLandmarks): number {
-  void l;
-  throw new Error("TODO Phase D: extendedCount (doc 04, M2)");
+  return (["index", "middle", "ring", "pinky"] as const).filter((f) => fingerExtended(l, f)).length;
 }
 
 /** Mean of WRIST, INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP. */
@@ -67,7 +79,7 @@ export function palmCenter(l: HandLandmarks): Point3 {
   return { x: sum.x / ids.length, y: sum.y / ids.length, z: sum.z / ids.length };
 }
 
-/** Midpoint of THUMB_TIP and INDEX_TIP; the pinch cursor (M2 uses it as the only cursor until M3). */
+/** Midpoint of THUMB_TIP and INDEX_TIP; the pinch cursor. */
 export function pinchMidpoint(l: HandLandmarks): Point3 {
   const a = l[Landmark.THUMB_TIP]!;
   const b = l[Landmark.INDEX_TIP]!;
@@ -84,7 +96,6 @@ function dist3(a: Point3, b: Point3): number {
 
 /** Raw cursor: pinch midpoint while pinching, INDEX_TIP when pointing, else palmCenter. */
 export function cursorFor(l: HandLandmarks, pinchActive: boolean): Point3 {
-  void l;
-  void pinchActive;
-  throw new Error("TODO Phase D: cursorFor (doc 04, M2)");
+  if (pinchActive) return pinchMidpoint(l);
+  return fingerExtended(l, "index") ? l[Landmark.INDEX_TIP]! : palmCenter(l);
 }

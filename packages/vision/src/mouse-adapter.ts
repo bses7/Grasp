@@ -23,7 +23,44 @@ export function createMouseAdapter(
   canvas: HTMLCanvasElement,
   onEvent: (event: InteractionEvent) => void,
 ): MouseAdapterHandle {
-  void canvas;
-  void onEvent;
-  throw new Error("TODO Phase D: createMouseAdapter (doc 04, M5)");
+  let down = false;
+  const cursorOf = (e: PointerEvent) => {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+    };
+  };
+
+  const onDown = (e: PointerEvent) => {
+    if (e.button !== 0 || down) return;
+    down = true;
+    canvas.setPointerCapture(e.pointerId); // keep receiving moves when the pointer leaves the canvas mid-drag
+    onEvent({ type: "grab_start", cursor: cursorOf(e), t: e.timeStamp });
+  };
+  const onMove = (e: PointerEvent) => {
+    onEvent(
+      down
+        ? { type: "grab_move", cursor: cursorOf(e), zHintDelta: 0, t: e.timeStamp }
+        : { type: "cursor", cursor: cursorOf(e), t: e.timeStamp },
+    );
+  };
+  const onUp = (e: PointerEvent) => {
+    if (!down) return;
+    down = false;
+    onEvent({ type: "grab_end", cursor: cursorOf(e), reason: "release", t: e.timeStamp });
+  };
+
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointermove", onMove);
+  canvas.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointercancel", onUp);
+  return {
+    dispose() {
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onUp);
+    },
+  };
 }

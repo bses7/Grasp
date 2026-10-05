@@ -22,8 +22,8 @@ export function applySceneCommand(cmd: SceneCommand): void {
       // camera tween to frame a componentId or hotspotId (M9)
       throw new Error("TODO Phase D: cameraTo (doc 05, M9)");
     case "setSocketVisual":
-      // ghost | ring | none for one socket (M5)
-      throw new Error("TODO Phase D: setSocketVisual (doc 05, M5)");
+      // ghost | ring | none for one socket: handled inside LessonScene's apply(), never reaches here
+      throw new Error("setSocketVisual is applied by LessonScene");
     case "setVisible":
       // show only the listed component ids (M9)
       throw new Error("TODO Phase D: setVisible (doc 05, M9)");

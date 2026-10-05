@@ -1,7 +1,7 @@
 /**
  * @grasp/vision public surface. Imports only @grasp/types and @mediapipe/tasks-vision.
  * The worker entry is NOT re-exported as a value (it would run `self.onmessage` on the main thread);
- * create it via `new Worker(new URL("@grasp/vision/worker", import.meta.url), { type: "module" })`.
+ * `startVision` creates it (worker-client.ts) and falls back to the main thread when it cannot.
  */
 
 export { VISION_CONSTANTS, type OneEuroParams } from "./constants";
@@ -28,6 +28,7 @@ export {
   extendedCount,
   palmCenter,
   pinchMidpoint,
+  thumbExtended,
   cursorFor,
   type Point3,
   type HandLandmarks,
@@ -35,14 +36,17 @@ export {
 } from "./landmarks";
 export { OneEuroFilter, LandmarkSmoother } from "./one-euro";
 export { JitterMeter } from "./jitter";
+export { FeatureExtractor } from "./features";
 export { GestureFsm, type GestureState, type GestureCandidate, type GestureFeatures } from "./gesture-fsm";
-export { computeCvStatus, type CvStatusInput } from "./cv-status";
+export { CvStatusTracker, type CvStatusInput } from "./cv-status";
+export { VisionPipeline, type PipelineOutput } from "./pipeline";
 export {
-  createVisionWorker,
+  startVision,
   supportsOffscreenCanvas,
-  type VisionWorkerHandle,
-  type VisionWorkerOptions,
+  type StartVisionOptions,
+  type VisionHandle,
   type VisionInferencePath,
+  type VisionMessage,
 } from "./worker-client";
 export { createMouseAdapter, type MouseAdapterHandle } from "./mouse-adapter";
 export {
@@ -59,4 +63,5 @@ export type {
   HoverResultMessage,
   WorkerInbound,
   WorkerOutbound,
+  WorkerControl,
 } from "./worker/hand-landmarker.worker";

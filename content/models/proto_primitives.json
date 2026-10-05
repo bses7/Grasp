@@ -1,0 +1,73 @@
+{
+  "id": "proto_primitives",
+  "subject": "anatomy",
+  "file": "proto_primitives.glb",
+  "units": "cm",
+  "defaultCamera": { "azimuth": 0, "elevation": 0, "distance": 40 },
+  "components": [
+    {
+      "id": "aorta",
+      "name": "Aorta",
+      "type": "vessel",
+      "interactable": true,
+      "grabbable": true,
+      "highlightable": true,
+      "description": "Prototype stand-in (cylinder). Carries oxygenated blood from the left ventricle to the body.",
+      "tags": ["prototype"],
+      "restSocketId": "socket_aorta"
+    },
+    {
+      "id": "pulmonary_artery",
+      "name": "Pulmonary Artery",
+      "type": "vessel",
+      "interactable": true,
+      "grabbable": true,
+      "highlightable": true,
+      "description": "Prototype stand-in (bent tube). Carries deoxygenated blood from the right ventricle to the lungs.",
+      "tags": ["prototype"],
+      "restSocketId": "socket_pulmonary_artery"
+    },
+    {
+      "id": "left_ventricle",
+      "name": "Left Ventricle",
+      "type": "chamber",
+      "interactable": true,
+      "grabbable": true,
+      "highlightable": true,
+      "description": "Prototype stand-in (flattened sphere). Pumps oxygenated blood into the aorta.",
+      "tags": ["prototype"],
+      "restSocketId": "socket_left_ventricle"
+    }
+  ],
+  "sockets": [
+    {
+      "id": "socket_aorta",
+      "transform": { "position": [6, 8, 0], "rotation": [0, 0, 0] },
+      "radius": 3,
+      "accepts": ["aorta", "pulmonary_artery"],
+      "visual": "ring"
+    },
+    {
+      "id": "socket_pulmonary_artery",
+      "transform": { "position": [14, 8, 0], "rotation": [0, 0, 0] },
+      "radius": 3,
+      "accepts": ["aorta", "pulmonary_artery"],
+      "visual": "ring"
+    },
+    {
+      "id": "socket_left_ventricle",
+      "transform": { "position": [10, -4, 0], "rotation": [0, 0, 0] },
+      "radius": 3,
+      "accepts": ["left_ventricle"],
+      "visual": "ring"
+    }
+  ],
+  "hotspots": [],
+  "poses": {
+    "start": {
+      "aorta": { "position": [-14, 8, 0], "rotation": [0, 0, 0] },
+      "pulmonary_artery": { "position": [-10, -2, 0], "rotation": [0, 0, 0] },
+      "left_ventricle": { "position": [-14, -9, 0], "rotation": [0, 0, 0] }
+    }
+  }
+}

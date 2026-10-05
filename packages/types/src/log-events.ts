@@ -57,6 +57,25 @@ export type LogEvent = {
  * tracking_regained { durationMs }
  * hand_count        { n }
  * tutor_message     { role: "user" | "assistant", taskId, chars, latencyMs, cached }   // never the text
- * perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate }
+ * perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate, path }   // see PerfSample
  * device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }
  */
+
+/**
+ * perf_sample payload (doc 14, doc 17 M4), assembled on the main thread every 5 s from render timings
+ * and the vision path's per-frame timings. Inference fields are null when no vision path runs (mouse condition).
+ */
+export type PerfSample = {
+  type: "perf_sample";
+  /** Main-thread animation frames per second over the window. */
+  fps: number;
+  frameMsP95: number;
+  inferenceMsP50: number | null;
+  inferenceMsP95: number | null;
+  /** Camera frame callback to interaction events delivered on the main thread. */
+  e2eMsP50: number | null;
+  /** Mean at-rest cursor jitter RMS, normalized units (doc 14 jitterNorm). */
+  jitterNorm: number | null;
+  delegate: "GPU" | "CPU" | null;
+  path: "worker" | "main_thread_fallback" | null;
+};

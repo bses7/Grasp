@@ -1,6 +1,6 @@
 /**
  * HandLandmarker setup (mediapipe-hands section 2). Assets come from this origin only (assets.ts).
- * M1 runs it on the main thread; M4 moves the same call into the worker.
+ * Runs inside the vision worker, or on the main thread in the fallback path (pipeline.ts).
  */
 import {
   DrawingUtils,
@@ -23,6 +23,7 @@ export async function createHandLandmarker(): Promise<{
   landmarker: HandLandmarker;
   delegate: LandmarkerDelegate;
 }> {
+  // Classic loader in both places: Turbopack emits the vision worker as a classic script (importScripts works).
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
   const create = (delegate: LandmarkerDelegate) =>
     HandLandmarker.createFromOptions(fileset, {

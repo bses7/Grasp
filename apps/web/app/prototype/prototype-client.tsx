@@ -1,77 +1,96 @@
 "use client";
 
 /**
- * M0 acceptance readout (doc 17): frames rendered (must stop when the pointer stops), same-origin
- * MediaPipe and Draco assets answer 200, and the vision worker bundles and starts.
+ * Prototype page (doc 17). M5: the primitive scene driven by the mouse and keyboard, with a scene
+ * event console, a "next drag ends as lost" toggle for the reason:"lost" path, and a React commit
+ * counter for the zero-commits-during-drag acceptance. The camera panel runs alongside; M7 joins them.
  */
-import { PrototypeCanvas } from "@grasp/scene";
-import {
-  DRACO_DECODER_URL,
-  HAND_LANDMARKER_TASK_URL,
-  MEDIAPIPE_VERSION,
-  MEDIAPIPE_WASM_URL,
-  type WorkerOutbound,
-} from "@grasp/vision";
-import { useEffect, useRef, useState } from "react";
+import { ModelManifestSchema } from "@grasp/content";
+import { LessonScene, type LessonSceneReadyHandle } from "@grasp/scene";
+import type { InteractionEvent, SceneEvent } from "@grasp/types";
+import { createMouseAdapter } from "@grasp/vision";
+import { Profiler, useEffect, useRef, useState } from "react";
+import protoPrimitives from "../../../../content/models/proto_primitives.json";
 import { CameraPanel } from "./camera-panel";
 
-const ASSETS = [
-  HAND_LANDMARKER_TASK_URL,
-  `${MEDIAPIPE_WASM_URL}/vision_wasm_internal.wasm`,
-  `${DRACO_DECODER_URL}draco_decoder.wasm`,
-];
+const manifest = ModelManifestSchema.parse(protoPrimitives);
+const LOG_LINES = 12;
+
+function describe(e: SceneEvent): string {
+  const t = `${(e.t / 1000).toFixed(2)}s`;
+  switch (e.type) {
+    case "place":
+      return `${t} place ${e.componentId} → ${e.socketId}`;
+    case "drop":
+      return `${t} drop ${e.componentId} cause=${e.cause} at [${e.position.join(", ")}]`;
+    case "select":
+      return `${t} select ${e.componentId ?? e.hotspotId} (${e.method})`;
+    case "hover":
+      return `${t} hover ${e.componentId}`;
+  }
+}
 
 export function PrototypeClient() {
-  const frames = useRef(0);
-  const frameText = useRef<HTMLSpanElement>(null);
-  const [assets, setAssets] = useState<Record<string, string>>({});
-  const [worker, setWorker] = useState("starting");
+  const [log, setLog] = useState<string[]>([]);
+  const [armLost, setArmLost] = useState(false);
+  const armLostRef = useRef(false);
+  armLostRef.current = armLost;
+  const commits = useRef(0);
+  const dragging = useRef(false);
+  const dragCommits = useRef<HTMLSpanElement>(null);
+  const dispose = useRef<() => void>(undefined);
 
-  useEffect(() => {
-    for (const url of ASSETS) {
-      fetch(url, { method: "HEAD" })
-        .then((r) => String(r.status))
-        .catch(() => "failed")
-        .then((status) => setAssets((a) => ({ ...a, [url]: status })));
-    }
+  useEffect(() => () => dispose.current?.(), []);
 
-    // Bundling check only: the worker's init handler posts cv_status, then hits its M4 TODO.
-    const w = new Worker(new URL("@grasp/vision/worker", import.meta.url), { type: "module" });
-    w.onmessage = (e: MessageEvent<WorkerOutbound>) => {
-      if (e.data.type === "cv_status") setWorker(`loaded (cv_status: ${e.data.state})`);
+  function onReady(handle: LessonSceneReadyHandle) {
+    const route = (e: InteractionEvent) => {
+      // Count commits from the first move to the release; the "Grabbed" announcement is not part of the drag.
+      if (e.type === "grab_start") dragging.current = false;
+      if (e.type === "grab_move" && !dragging.current) [dragging.current, commits.current] = [true, 0];
+      if (e.type === "grab_end") {
+        if (dragCommits.current) dragCommits.current.textContent = String(commits.current);
+        if (armLostRef.current) {
+          setArmLost(false);
+          return handle.dispatch({ ...e, reason: "lost" }); // stands in for the worker's grace expiry
+        }
+      }
+      handle.dispatch(e);
     };
-    w.onerror = (e) => {
-      e.preventDefault();
-      setWorker((s) => (s.startsWith("loaded") ? `${s}; init is a TODO until M4` : `error: ${e.message}`));
-    };
-    w.postMessage({ type: "init", wasmBaseUrl: MEDIAPIPE_WASM_URL, modelAssetPath: HAND_LANDMARKER_TASK_URL });
-    return () => w.terminate();
-  }, []);
+    dispose.current = createMouseAdapter(handle.canvas, route).dispose;
+  }
 
   return (
-    <main className="grid h-screen grid-rows-[1fr_auto]">
-      <div className="grid min-h-0 grid-cols-[1fr_auto]">
-        <PrototypeCanvas
-          onFrame={() => {
-            frames.current += 1;
-            if (frameText.current) frameText.current.textContent = String(frames.current);
-          }}
-        />
-        <CameraPanel />
+    <main className="grid h-screen grid-cols-[1fr_auto]">
+      <div className="grid min-h-0 grid-rows-[1fr_auto]">
+        <Profiler id="scene" onRender={() => void (commits.current += 1)}>
+          <LessonScene
+            manifest={manifest}
+            onReady={onReady}
+            onSceneEvent={(e) => {
+              console.log("scene", e);
+              setLog((l) => [...l, describe(e)].slice(-LOG_LINES));
+            }}
+          />
+        </Profiler>
+        <section className="bg-surface p-4 font-mono text-xs" aria-label="Scene events">
+          <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
+            <span>Drag a part into a ring (mouse), or Tab / Space / arrows.</span>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={armLost} onChange={(e) => setArmLost(e.target.checked)} />
+              next drag ends as lost
+            </label>
+            <span>
+              React commits during last drag: <span ref={dragCommits}>n/a</span>
+            </span>
+          </div>
+          <ol className="h-28 overflow-y-auto" aria-live="polite">
+            {log.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ol>
+        </section>
       </div>
-      <section className="bg-surface p-4 font-mono text-sm" aria-live="polite">
-        <p>
-          frames rendered: <span ref={frameText}>0</span>{" "}
-          <span className="text-text-muted">(stops when the pointer stops)</span>
-        </p>
-        <p>mediapipe {MEDIAPIPE_VERSION}</p>
-        {ASSETS.map((url) => (
-          <p key={url}>
-            {url}: {assets[url] ?? "…"}
-          </p>
-        ))}
-        <p>worker: {worker}</p>
-      </section>
+      <CameraPanel />
     </main>
   );
 }
