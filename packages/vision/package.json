@@ -1,0 +1,23 @@
+{
+  "name": "@grasp/vision",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker/hand-landmarker.worker.ts",
+    "./mouse-adapter": "./src/mouse-adapter.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@grasp/types": "workspace:*",
+    "@mediapipe/tasks-vision": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

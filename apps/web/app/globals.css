@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/*
+ * Colour tokens from docs/11-ui-ux.md ("Colour roles"). Semantic roles, not
+ * palette names. Dark is the 3D environment (default); light is for dashboard
+ * and text screens, selected with [data-theme="light"] on <html>.
+ * The same values are exported for the R3F scene in @grasp/ui tokens.ts.
+ */
+:root {
+  --bg: #0b1020;
+  --surface: rgb(20 26 46 / 0.92);
+  --text: #e8ecf8;
+  --text-muted: #9aa3bf;
+  --accent: #4fd1ff;
+  --success: #2ed47a;
+  --partial: #ffb547;
+  --error: #ff5c7a;
+  --warn-tracking: #ffb547;
+  --ghost: rgb(79 209 255 / 0.25);
+}
+
+[data-theme="light"] {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --text: #141a2e;
+  --text-muted: #5b637a;
+  --accent: #0e7cff;
+  --success: #118a4a;
+  --partial: #b36b00;
+  --error: #c62846;
+  --warn-tracking: #ffb547;
+  --ghost: transparent;
+}
+
+/* Expose the roles to Tailwind utilities: bg-bg, text-accent, border-error ... */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-partial: var(--partial);
+  --color-error: var(--error);
+  --color-warn-tracking: var(--warn-tracking);
+  --color-ghost: var(--ghost);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}

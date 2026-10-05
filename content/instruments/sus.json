@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "instrument": "sus",
+  "title": "System Usability Scale",
+  "instructions": "For each statement, mark how strongly you agree or disagree with it, thinking about the learning tool you just used.",
+  "scale": {
+    "min": 1,
+    "max": 5,
+    "anchors": { "1": "Strongly disagree", "5": "Strongly agree" }
+  },
+  "items": [
+    { "no": 1, "stem": "I think that I would like to use this system frequently.", "polarity": "positive" },
+    { "no": 2, "stem": "I found the system unnecessarily complex.", "polarity": "negative" },
+    { "no": 3, "stem": "I thought the system was easy to use.", "polarity": "positive" },
+    { "no": 4, "stem": "I think that I would need the support of a technical person to be able to use this system.", "polarity": "negative" },
+    { "no": 5, "stem": "I found the various functions in this system were well integrated.", "polarity": "positive" },
+    { "no": 6, "stem": "I thought there was too much inconsistency in this system.", "polarity": "negative" },
+    { "no": 7, "stem": "I would imagine that most people would learn to use this system very quickly.", "polarity": "positive" },
+    { "no": 8, "stem": "I found the system very cumbersome to use.", "polarity": "negative" },
+    { "no": 9, "stem": "I felt very confident using the system.", "polarity": "positive" },
+    { "no": 10, "stem": "I needed to learn a lot of things before I could get going with this system.", "polarity": "negative" }
+  ],
+  "scoring": {
+    "note": "Per docs/14 section 2.4: for odd-numbered (positive) items the contribution is r - 1; for even-numbered (negative) items it is 5 - r. Sum the ten contributions and multiply by 2.5 for a 0 to 100 score. Report the single score; do not interpret individual items. Standard SUS wording (Brooke, 1996) retained so scores are comparable with the published distribution; 'system' is not replaced."
+  }
+}

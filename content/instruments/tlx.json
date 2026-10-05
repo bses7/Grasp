@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "instrument": "tlx",
+  "title": "NASA Task Load Index (raw)",
+  "instructions": "Rate the lesson you just completed on each of the six scales. Mark the point on each line that best represents your experience.",
+  "scale": {
+    "ticks": 21,
+    "stored": { "min": 0, "max": 100, "step": 5 },
+    "note": "Each subscale is shown as a 21-tick line (0 to 20) and stored as tick x 5, giving 0 to 100 per docs/14 section 2.4."
+  },
+  "subscales": [
+    {
+      "id": "mental",
+      "title": "Mental Demand",
+      "stem": "How mentally demanding was the task?",
+      "anchors": { "0": "Very low", "100": "Very high" }
+    },
+    {
+      "id": "physical",
+      "title": "Physical Demand",
+      "stem": "How physically demanding was the task?",
+      "anchors": { "0": "Very low", "100": "Very high" }
+    },
+    {
+      "id": "temporal",
+      "title": "Temporal Demand",
+      "stem": "How hurried or rushed was the pace of the task?",
+      "anchors": { "0": "Very low", "100": "Very high" }
+    },
+    {
+      "id": "performance",
+      "title": "Performance",
+      "stem": "How successful were you in accomplishing what you were asked to do?",
+      "anchors": { "0": "Perfect", "100": "Failure" }
+    },
+    {
+      "id": "effort",
+      "title": "Effort",
+      "stem": "How hard did you have to work to accomplish your level of performance?",
+      "anchors": { "0": "Very low", "100": "Very high" }
+    },
+    {
+      "id": "frustration",
+      "title": "Frustration",
+      "stem": "How insecure, discouraged, irritated, stressed, and annoyed were you?",
+      "anchors": { "0": "Very low", "100": "Very high" }
+    }
+  ],
+  "scoring": {
+    "note": "Raw TLX (RTLX): rawTLX = mean of the six subscale values, 0 to 100. No pairwise source-of-load weighting. Performance is scored as stored (0 = perfect, 100 = failure), so higher is worse on every subscale. Subscales are reported individually with Holm correction per docs/14."
+  }
+}

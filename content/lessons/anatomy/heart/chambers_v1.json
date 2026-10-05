@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "id": "anatomy.heart.chambers_v1",
+  "modelId": "heart_v1",
+  "title": "The Four Chambers of the Heart",
+  "estimatedMinutes": 12,
+  "difficulty": 1,
+  "objectives": [
+    { "id": "obj_identify_chambers", "statement": "Identify the four chambers of the heart", "bloom": "remember", "masteryThreshold": 0.8 },
+    { "id": "obj_place_vessels", "statement": "Attach the great vessels to the correct chambers", "bloom": "apply", "masteryThreshold": 0.8 },
+    { "id": "obj_blood_path", "statement": "Order the path of blood through the heart", "bloom": "analyze", "masteryThreshold": 0.7 }
+  ],
+  "activities": [
+    {
+      "id": "act_intro",
+      "kind": "introduction",
+      "title": "Meet the heart",
+      "narration": [
+        "The heart has four chambers: two atria on top and two ventricles below.",
+        "Blood enters through the atria and leaves through the ventricles.",
+        "Rotate the heart with a pinch on empty space."
+      ],
+      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false },
+      "tasks": [],
+      "completion": { "time": 20 }
+    },
+    {
+      "id": "act_explore",
+      "kind": "explore",
+      "title": "Look around",
+      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false, "socketsVisible": false },
+      "tasks": [],
+      "completion": { "time": 60 }
+    },
+    {
+      "id": "act_guided",
+      "kind": "guided",
+      "title": "Find and attach",
+      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": true, "socketsVisible": true },
+      "tasks": [
+        {
+          "id": "t_g1",
+          "type": "identify",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Point to the left ventricle.",
+          "expect": { "componentId": "left_ventricle" },
+          "maxAttempts": 3,
+          "scoring": { "correct": 10, "hintPenalty": 2 },
+          "hints": [
+            { "level": 1, "text": "It is one of the two lower chambers." },
+            { "level": 2, "highlight": ["left_ventricle", "right_ventricle"], "text": "It is on the learner's right when facing the heart." },
+            { "level": 3, "highlight": ["left_ventricle"], "cameraTo": "hs_lv_wall" }
+          ]
+        },
+        {
+          "id": "t_g2",
+          "type": "identify",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Point to the right atrium.",
+          "expect": { "componentId": "right_atrium" },
+          "maxAttempts": 3,
+          "scoring": { "correct": 10, "hintPenalty": 2 },
+          "hints": [
+            { "level": 1, "text": "Atria are the upper chambers." },
+            { "level": 2, "tutor": true },
+            { "level": 3, "highlight": ["right_atrium"] }
+          ]
+        },
+        {
+          "id": "t_g3",
+          "type": "place",
+          "objectiveId": "obj_place_vessels",
+          "prompt": "Pinch the aorta and attach it to the heart.",
+          "expect": { "componentId": "aorta", "socketId": "socket_aorta" },
+          "maxAttempts": 3,
+          "scoring": { "correct": 15, "partial": 5, "hintPenalty": 3 },
+          "hints": [
+            { "level": 1, "text": "The aorta leaves from the left ventricle at the top." },
+            { "level": 2, "highlight": ["socket_aorta"] },
+            { "level": 3, "tutor": true }
+          ]
+        }
+      ],
+      "completion": { "allTasks": true }
+    },
+    {
+      "id": "act_challenge",
+      "kind": "challenge",
+      "title": "Rebuild the heart",
+      "scene": { "pose": "exploded", "allowOrbit": true, "allowGrab": true, "socketsVisible": true },
+      "tasks": [
+        {
+          "id": "t_c1",
+          "type": "place",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Place the left ventricle.",
+          "expect": { "componentId": "left_ventricle", "socketId": "socket_left_ventricle" },
+          "scoring": { "correct": 10, "partial": 3 },
+          "hints": [{ "level": 1, "text": "Lower chambers go at the bottom." }]
+        },
+        {
+          "id": "t_c2",
+          "type": "place",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Place the right ventricle.",
+          "expect": { "componentId": "right_ventricle", "socketId": "socket_right_ventricle" },
+          "scoring": { "correct": 10, "partial": 3 },
+          "hints": []
+        },
+        {
+          "id": "t_c3",
+          "type": "place",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Place the left atrium.",
+          "expect": { "componentId": "left_atrium", "socketId": "socket_left_atrium" },
+          "scoring": { "correct": 10, "partial": 3 },
+          "hints": []
+        },
+        {
+          "id": "t_c4",
+          "type": "place",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Place the right atrium.",
+          "expect": { "componentId": "right_atrium", "socketId": "socket_right_atrium" },
+          "scoring": { "correct": 10, "partial": 3 },
+          "hints": []
+        },
+        {
+          "id": "t_c5",
+          "type": "sequence",
+          "objectiveId": "obj_blood_path",
+          "prompt": "Select the chambers in the order deoxygenated blood passes through the right side of the heart, then the left.",
+          "expect": {
+            "steps": [
+              { "componentId": "right_atrium" },
+              { "componentId": "right_ventricle" },
+              { "componentId": "left_atrium" },
+              { "componentId": "left_ventricle" }
+            ],
+            "strictOrder": true
+          },
+          "scoring": { "correct": 20, "partial": 8 },
+          "hints": [{ "level": 1, "text": "Blood from the body arrives on the right side first." }]
+        }
+      ],
+      "completion": { "allTasks": true }
+    },
+    {
+      "id": "act_assess",
+      "kind": "assessment",
+      "title": "Check your understanding",
+      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": true, "socketsVisible": false },
+      "tasks": [
+        {
+          "id": "t_a1",
+          "type": "identify",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Point to the right ventricle.",
+          "expect": { "componentId": "right_ventricle" },
+          "maxAttempts": 1,
+          "scoring": { "correct": 10 },
+          "hints": []
+        },
+        {
+          "id": "t_a2",
+          "type": "identify",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Point to the left atrium.",
+          "expect": { "componentId": "left_atrium" },
+          "maxAttempts": 1,
+          "scoring": { "correct": 10 },
+          "hints": []
+        },
+        {
+          "id": "t_a3",
+          "type": "place",
+          "objectiveId": "obj_place_vessels",
+          "prompt": "Attach the pulmonary artery.",
+          "expect": { "componentId": "pulmonary_artery", "socketId": "socket_pulmonary_artery" },
+          "maxAttempts": 1,
+          "scoring": { "correct": 15, "partial": 5 },
+          "hints": []
+        },
+        {
+          "id": "t_a4",
+          "type": "compare",
+          "objectiveId": "obj_identify_chambers",
+          "prompt": "Which ventricle has the thicker wall?",
+          "expect": { "componentIds": ["left_ventricle", "right_ventricle"], "attribute": "wall_thickness", "answer": "left_ventricle" },
+          "maxAttempts": 1,
+          "scoring": { "correct": 10 },
+          "hints": []
+        }
+      ],
+      "completion": { "allTasks": true }
+    },
+    {
+      "id": "act_mastery",
+      "kind": "mastery",
+      "title": "Your results",
+      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false },
+      "tasks": [],
+      "completion": { "allTasks": true }
+    }
+  ]
+}

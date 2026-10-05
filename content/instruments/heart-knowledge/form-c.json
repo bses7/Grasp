@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "instrument": "heart-knowledge",
+  "form": "C",
+  "lessonId": "anatomy.heart.chambers_v1",
+  "figure": {
+    "file": "figures/heart-schematic.svg",
+    "labels": {
+      "A": "pulmonary_artery",
+      "B": "left_atrium",
+      "C": "inferior_vena_cava",
+      "D": "right_ventricle",
+      "E": "septum",
+      "F": "left_ventricle",
+      "G": "aorta",
+      "H": "right_atrium",
+      "I": "pulmonary_veins",
+      "J": "superior_vena_cava"
+    }
+  },
+  "items": [
+    {
+      "id": "c01",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label H mark on the diagram?",
+      "options": [
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" }
+      ],
+      "answer": "right_atrium"
+    },
+    {
+      "id": "c02",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label F mark on the diagram?",
+      "options": [
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" }
+      ],
+      "answer": "left_ventricle"
+    },
+    {
+      "id": "c03",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label B mark on the diagram?",
+      "options": [
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" }
+      ],
+      "answer": "left_atrium"
+    },
+    {
+      "id": "c04",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label D mark on the diagram?",
+      "options": [
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "septum", "text": "Septum" }
+      ],
+      "answer": "right_ventricle"
+    },
+    {
+      "id": "c05",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label A mark on the diagram?",
+      "options": [
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "superior_vena_cava", "text": "Superior vena cava" }
+      ],
+      "answer": "pulmonary_artery"
+    },
+    {
+      "id": "c06",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label I mark on the diagram?",
+      "options": [
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" },
+        { "id": "aorta", "text": "Aorta" }
+      ],
+      "answer": "pulmonary_veins"
+    },
+    {
+      "id": "c07",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label J mark on the diagram?",
+      "options": [
+        { "id": "superior_vena_cava", "text": "Superior vena cava" },
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" }
+      ],
+      "answer": "superior_vena_cava"
+    },
+    {
+      "id": "c08",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put these in the order blood passes through them, starting from the right atrium and going to the lungs and back.",
+      "options": [
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "right_atrium", "text": "Right atrium" }
+      ],
+      "answer": ["right_atrium", "right_ventricle", "pulmonary_artery", "pulmonary_veins"]
+    },
+    {
+      "id": "c09",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put these in the order blood passes through them, starting from the pulmonary artery.",
+      "options": [
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" }
+      ],
+      "answer": ["pulmonary_artery", "pulmonary_veins", "left_atrium", "left_ventricle"]
+    },
+    {
+      "id": "c10",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put the four chambers in the order blood passes through them, starting from the right ventricle.",
+      "options": [
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_atrium", "text": "Left atrium" }
+      ],
+      "answer": ["right_ventricle", "left_atrium", "left_ventricle", "right_atrium"]
+    },
+    {
+      "id": "c11",
+      "type": "mcq",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which chamber pumps blood to the whole body?",
+      "options": [
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" }
+      ],
+      "answer": "left_ventricle"
+    },
+    {
+      "id": "c12",
+      "type": "mcq",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Where are the atria located in the heart?",
+      "options": [
+        { "id": "above", "text": "Above the ventricles" },
+        { "id": "below", "text": "Below the ventricles" },
+        { "id": "inside", "text": "Inside the ventricles" },
+        { "id": "beside", "text": "Beside the ventricles, on the same level" }
+      ],
+      "answer": "above"
+    },
+    {
+      "id": "c13",
+      "type": "mcq",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which vessels bring oxygenated blood from the lungs into the heart?",
+      "options": [
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" },
+        { "id": "superior_vena_cava", "text": "Superior vena cava" }
+      ],
+      "answer": "pulmonary_veins"
+    },
+    {
+      "id": "c14",
+      "type": "mcq",
+      "objectiveId": "obj_place_vessels",
+      "stem": "The pulmonary artery leaves the heart from which chamber?",
+      "options": [
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_atrium", "text": "Left atrium" }
+      ],
+      "answer": "right_ventricle"
+    },
+    {
+      "id": "c15",
+      "type": "mcq",
+      "objectiveId": "obj_blood_path",
+      "stem": "Blood returning from the lungs enters which side of the heart?",
+      "options": [
+        { "id": "left", "text": "The left side" },
+        { "id": "right", "text": "The right side" },
+        { "id": "both", "text": "Both sides at once" },
+        { "id": "septum", "text": "The septum" }
+      ],
+      "answer": "left"
+    }
+  ]
+}

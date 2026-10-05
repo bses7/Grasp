@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `lib` does not merge with the base; restate it and add WebWorker for
+    // src/worker/hand-landmarker.worker.ts. DOM + WebWorker together produce
+    // duplicate-declaration noise inside lib.d.ts files; skipLibCheck silences
+    // that without hiding errors in our own sources.
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

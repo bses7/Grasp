@@ -1,0 +1,30 @@
+# dependencies and build output
+node_modules
+.next
+coverage
+.vercel
+*.tsbuildinfo
+
+# environment
+.env*
+!.env.example
+
+# logs and OS noise
+*.log
+.DS_Store
+
+# Blender sources stay outside the repo (doc 16 open question 1: GLBs committed, .blend ignored, no LFS for MVP)
+content/source/*.blend
+content/source/*.blend1
+
+# served copies; the source of truth is models/, which is committed (one heart stays under 5 MB)
+apps/web/public/models/*.glb
+
+# MediaPipe runtime assets are downloaded by a script; the pinned version is recorded in apps/web/public/mediapipe/README.md
+apps/web/public/mediapipe/*.task
+apps/web/public/mediapipe/*.wasm
+
+
+.claude
+CLAUDE.md
+

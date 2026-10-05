@@ -1,0 +1,32 @@
+{
+  "name": "grasp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.29.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @grasp/web dev",
+    "build": "pnpm --filter @grasp/web build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "content:validate": "tsx scripts/content/validate.ts",
+    "content:hash": "tsx scripts/content/hash.ts",
+    "models:optimize": "bash scripts/models/optimize.sh",
+    "models:upload": "tsx scripts/models/upload.ts",
+    "research:metrics": "tsx scripts/research/metrics.ts",
+    "research:export": "tsx scripts/research/export-session.ts",
+    "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:seed": "tsx scripts/db/seed-dev.ts",
+    "db:up": "docker compose -f infrastructure/docker-compose.yml up -d",
+    "db:down": "docker compose -f infrastructure/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  }
+}

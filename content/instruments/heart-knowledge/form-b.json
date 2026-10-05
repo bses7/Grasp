@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "instrument": "heart-knowledge",
+  "form": "B",
+  "lessonId": "anatomy.heart.chambers_v1",
+  "figure": {
+    "file": "figures/heart-schematic.svg",
+    "labels": {
+      "A": "left_ventricle",
+      "B": "aorta",
+      "C": "right_atrium",
+      "D": "pulmonary_veins",
+      "E": "left_atrium",
+      "F": "superior_vena_cava",
+      "G": "right_ventricle",
+      "H": "septum",
+      "I": "pulmonary_artery",
+      "J": "inferior_vena_cava"
+    }
+  },
+  "items": [
+    {
+      "id": "b01",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label G mark on the diagram?",
+      "options": [
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_atrium", "text": "Left atrium" }
+      ],
+      "answer": "right_ventricle"
+    },
+    {
+      "id": "b02",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label E mark on the diagram?",
+      "options": [
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_ventricle", "text": "Right ventricle" }
+      ],
+      "answer": "left_atrium"
+    },
+    {
+      "id": "b03",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label A mark on the diagram?",
+      "options": [
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "septum", "text": "Septum" }
+      ],
+      "answer": "left_ventricle"
+    },
+    {
+      "id": "b04",
+      "type": "identify_label",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which structure does label C mark on the diagram?",
+      "options": [
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "superior_vena_cava", "text": "Superior vena cava" }
+      ],
+      "answer": "right_atrium"
+    },
+    {
+      "id": "b05",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label B mark on the diagram?",
+      "options": [
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" }
+      ],
+      "answer": "aorta"
+    },
+    {
+      "id": "b06",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label D mark on the diagram?",
+      "options": [
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" },
+        { "id": "superior_vena_cava", "text": "Superior vena cava" }
+      ],
+      "answer": "pulmonary_veins"
+    },
+    {
+      "id": "b07",
+      "type": "identify_label",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which structure does label J mark on the diagram?",
+      "options": [
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" },
+        { "id": "superior_vena_cava", "text": "Superior vena cava" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "aorta", "text": "Aorta" }
+      ],
+      "answer": "inferior_vena_cava"
+    },
+    {
+      "id": "b08",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put these in the order blood passes through them, starting from the lower body.",
+      "options": [
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" },
+        { "id": "right_ventricle", "text": "Right ventricle" }
+      ],
+      "answer": ["inferior_vena_cava", "right_atrium", "right_ventricle", "pulmonary_artery"]
+    },
+    {
+      "id": "b09",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put these in the order blood passes through them, starting from the right ventricle and going through the lungs.",
+      "options": [
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" }
+      ],
+      "answer": ["right_ventricle", "pulmonary_artery", "pulmonary_veins", "left_atrium"]
+    },
+    {
+      "id": "b10",
+      "type": "order",
+      "objectiveId": "obj_blood_path",
+      "stem": "Put the four chambers in the order blood passes through them, starting when blood arrives from the lungs.",
+      "options": [
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_atrium", "text": "Right atrium" },
+        { "id": "left_atrium", "text": "Left atrium" }
+      ],
+      "answer": ["left_atrium", "left_ventricle", "right_atrium", "right_ventricle"]
+    },
+    {
+      "id": "b11",
+      "type": "mcq",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Why is the wall of the left ventricle thicker than the wall of the right ventricle?",
+      "options": [
+        { "id": "systemic_pressure", "text": "It pumps blood to the whole body against higher pressure" },
+        { "id": "more_blood", "text": "It holds more blood than any other chamber" },
+        { "id": "oxygen", "text": "It adds oxygen to the blood" },
+        { "id": "lungs", "text": "It pumps blood to the lungs, which are far away" }
+      ],
+      "answer": "systemic_pressure"
+    },
+    {
+      "id": "b12",
+      "type": "mcq",
+      "objectiveId": "obj_identify_chambers",
+      "stem": "Which chambers pump blood out of the heart?",
+      "options": [
+        { "id": "ventricles", "text": "The two ventricles" },
+        { "id": "atria", "text": "The two atria" },
+        { "id": "right_side", "text": "The right atrium and right ventricle" },
+        { "id": "septum", "text": "The septum" }
+      ],
+      "answer": "ventricles"
+    },
+    {
+      "id": "b13",
+      "type": "mcq",
+      "objectiveId": "obj_place_vessels",
+      "stem": "Which artery carries deoxygenated blood?",
+      "options": [
+        { "id": "pulmonary_artery", "text": "Pulmonary artery" },
+        { "id": "aorta", "text": "Aorta" },
+        { "id": "pulmonary_veins", "text": "Pulmonary veins" },
+        { "id": "inferior_vena_cava", "text": "Inferior vena cava" }
+      ],
+      "answer": "pulmonary_artery"
+    },
+    {
+      "id": "b14",
+      "type": "mcq",
+      "objectiveId": "obj_place_vessels",
+      "stem": "The aorta leaves the heart from which chamber?",
+      "options": [
+        { "id": "left_ventricle", "text": "Left ventricle" },
+        { "id": "right_ventricle", "text": "Right ventricle" },
+        { "id": "left_atrium", "text": "Left atrium" },
+        { "id": "right_atrium", "text": "Right atrium" }
+      ],
+      "answer": "left_ventricle"
+    },
+    {
+      "id": "b15",
+      "type": "mcq",
+      "objectiveId": "obj_blood_path",
+      "stem": "Which side of the heart holds deoxygenated blood?",
+      "options": [
+        { "id": "right", "text": "The right side" },
+        { "id": "left", "text": "The left side" },
+        { "id": "both", "text": "Both sides, mixed by the septum" },
+        { "id": "atria", "text": "Only the atria" }
+      ],
+      "answer": "right"
+    }
+  ]
+}
