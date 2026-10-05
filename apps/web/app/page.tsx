@@ -14,7 +14,7 @@ export default function HomePage() {
         </Link>
       </p>
       <p className="mt-8 text-sm text-text-muted">
-        TODO Phase D M0 (docs/17): this page becomes the prototype scene entry.
+        Developer: <Link href="/prototype" className="underline">prototype scene</Link> (docs/17).
       </p>
     </main>
   );

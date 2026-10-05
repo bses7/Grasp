@@ -60,6 +60,11 @@ export const VISION_CONSTANTS = {
   LUMINANCE_MAX: 200,
   LUMINANCE_SAMPLE: { width: 32, height: 18 },
 
+  // Jitter metric (doc 14 jitterNorm): RMS cursor deviation over the window while net speed is below rest speed
+  JITTER_WINDOW_MS: 1000,
+  JITTER_REST_SPEED: 0.02, // frame widths per second
+  JITTER_TARGET: 0.005,
+
   // Camera and budget
   CAMERA: { width: 640, height: 360, fps: 30, facingMode: "user" },
   INFERENCE_P95_BUDGET_MS: 33,

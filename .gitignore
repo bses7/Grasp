@@ -20,9 +20,10 @@ content/source/*.blend1
 # served copies; the source of truth is models/, which is committed (one heart stays under 5 MB)
 apps/web/public/models/*.glb
 
-# MediaPipe runtime assets are downloaded by a script; the pinned version is recorded in apps/web/public/mediapipe/README.md
-apps/web/public/mediapipe/*.task
-apps/web/public/mediapipe/*.wasm
+# Runtime assets copied/downloaded by `pnpm assets:sync` (scripts/assets/sync-public.ts); pinned in packages/vision/src/assets.ts
+apps/web/public/mediapipe/*/
+apps/web/public/draco/*
+!apps/web/public/draco/README.md
 
 
 .claude

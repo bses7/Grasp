@@ -6,18 +6,35 @@
 
 export { VISION_CONSTANTS, type OneEuroParams } from "./constants";
 export {
+  MEDIAPIPE_VERSION,
+  MEDIAPIPE_WASM_URL,
+  HAND_LANDMARKER_TASK_URL,
+  DRACO_DECODER_URL,
+} from "./assets";
+export { openCamera, stopCamera } from "./capture";
+export {
+  createHandLandmarker,
+  drawHands,
+  type HandLandmarker,
+  type HandLandmarkerResult,
+  type LandmarkerDelegate,
+  type NormalizedLandmark,
+} from "./landmarker";
+export {
   Landmark,
   handSize,
   pinchDist,
   fingerExtended,
   extendedCount,
   palmCenter,
+  pinchMidpoint,
   cursorFor,
   type Point3,
   type HandLandmarks,
   type Finger,
 } from "./landmarks";
-export { OneEuroFilter } from "./one-euro";
+export { OneEuroFilter, LandmarkSmoother } from "./one-euro";
+export { JitterMeter } from "./jitter";
 export { GestureFsm, type GestureState, type GestureCandidate, type GestureFeatures } from "./gesture-fsm";
 export { computeCvStatus, type CvStatusInput } from "./cv-status";
 export {

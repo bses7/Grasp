@@ -1,4 +1,11 @@
 import type { NextConfig } from "next";
+import { resolve } from "node:path";
+
+// One .env at the repo root for the whole monorepo; Next only auto-loads apps/web/.env.
+// Already-set variables win (Vercel injects its own; there is no root .env there).
+try {
+  process.loadEnvFile(resolve(import.meta.dirname, "../../.env"));
+} catch {}
 
 /**
  * Next.js config for the single deployable app (docs/16-folder-structure.md).

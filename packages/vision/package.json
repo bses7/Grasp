@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@grasp/types": "workspace:*",
-    "@mediapipe/tasks-vision": "^1.0.0"
+    "@mediapipe/tasks-vision": "1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.9.0"

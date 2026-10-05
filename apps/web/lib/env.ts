@@ -36,6 +36,7 @@ export function getEnv(): ServerEnv {
   if (typeof window !== "undefined") {
     throw new Error("lib/env.ts is server-only; do not import it from client code");
   }
-  if (!cached) cached = serverEnvSchema.parse(process.env);
+  // `KEY=` in .env arrives as "", which would fail z.url(); treat empty as unset.
+  if (!cached) cached = serverEnvSchema.parse(Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== "")));
   return cached;
 }

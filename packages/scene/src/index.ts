@@ -36,3 +36,5 @@ export { OrbitRig } from "./components/orbit-rig";
 export type { OrbitPose, OrbitRigProps } from "./components/orbit-rig";
 export { MouseControls, KEY_MAP } from "./components/mouse-controls";
 export type { KeyAction, MouseControlsProps } from "./components/mouse-controls";
+export { PrototypeCanvas } from "./components/prototype-canvas";
+export type { PrototypeCanvasProps } from "./components/prototype-canvas";

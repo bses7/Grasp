@@ -18,5 +18,24 @@ services:
       timeout: 3s
       retries: 10
 
+  # V1 local tutor model (doc 07, locked position 7). Opt-in: `pnpm tutor:up`; `pnpm db:up` does not start it.
+  # The MVP tutor stays TUTOR_ENGINE=template; this only lets the V1 local-model path be measured.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: grasp-ollama
+    profiles: [tutor]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
 volumes:
   pgdata:
+  ollama:

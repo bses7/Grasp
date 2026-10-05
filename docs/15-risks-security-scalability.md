@@ -110,12 +110,12 @@ The MVP holds exactly two secrets, `DATABASE_URL` and `SESSION_COOKIE_SECRET`. T
 
 ### Content Security Policy and headers
 
-The CSP must allow WebAssembly compilation, a Web Worker, blob URLs for `ImageBitmap` and GLB loading, and self-hosted MediaPipe assets, while blocking everything else. Starting policy, sent from `next.config` headers:
+The CSP must allow WebAssembly compilation, a Web Worker, blob URLs for `ImageBitmap` and GLB loading, and self-hosted MediaPipe assets, while blocking everything else. Policy, sent per request from `apps/web/proxy.ts` with a fresh nonce:
 
 ```text
 Content-Security-Policy:
   default-src 'self';
-  script-src 'self' 'wasm-unsafe-eval';
+  script-src 'self' 'nonce-<per-request>' 'strict-dynamic' 'wasm-unsafe-eval';
   worker-src 'self' blob:;
   connect-src 'self' https://cdn.<your-domain>;
   img-src 'self' blob: data:;
@@ -135,6 +135,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 | Directive | Why | Tier |
 |---|---|---|
+| `script-src 'nonce-…' 'strict-dynamic'` | The App Router hydrates through inline scripts, so `'self'` alone blocks every page (found at M0). Next.js reads the nonce from the request's CSP header and tags its own scripts; this requires every page to render dynamically (`await connection()` in the root layout). Avoids `'unsafe-inline'` for scripts | **MVP** |
 | `script-src 'wasm-unsafe-eval'` | Required for `WebAssembly.instantiate`; avoids the far broader `'unsafe-eval'`. Next.js dev mode needs `'unsafe-eval'`; add it only when `NODE_ENV !== "production"` | **MVP** |
 | `worker-src 'self' blob:` | The vision worker is bundled from the same origin; some bundlers load workers through blob URLs | **MVP** |
 | `connect-src` | Own origin for route handlers plus the CDN host for GLB, Draco, `.task`, and WASM. No third-party API is called from the browser or the server in **MVP**, so nothing else appears. This single line is the structural guarantee that video cannot be posted anywhere unexpected. A **V1** WebLLM engine would need its model files self-hosted under the same origin or CDN host, not fetched from a public hub, to keep this line unchanged | **MVP** |

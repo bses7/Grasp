@@ -12,14 +12,20 @@
  * `assetOrigin` and it is appended to `connect-src` and `img-src`.
  */
 export type CspOptions = {
+  /**
+   * Per-request nonce from proxy.ts. The App Router hydrates through inline scripts, so without it
+   * `script-src 'self'` blocks every page. Next reads the nonce back from this header and tags its scripts.
+   */
+  nonce: string;
   /** Next.js dev mode needs 'unsafe-eval' for React Refresh; never in production. */
   dev: boolean;
   /** Absolute origin of the asset CDN, e.g. "https://cdn.example.org". V1 only. */
   assetOrigin?: string;
 };
 
-export function buildCsp({ dev, assetOrigin }: CspOptions): string {
-  const scriptSrc = ["'self'", "'wasm-unsafe-eval'"];
+export function buildCsp({ nonce, dev, assetOrigin }: CspOptions): string {
+  // 'strict-dynamic' lets nonce-trusted bundles load their chunks; 'self' is the CSP2 fallback.
+  const scriptSrc = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", "'wasm-unsafe-eval'"];
   if (dev) scriptSrc.push("'unsafe-eval'");
 
   const connectSrc = ["'self'"];

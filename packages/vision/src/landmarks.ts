@@ -39,14 +39,12 @@ export type Finger = "index" | "middle" | "ring" | "pinky";
 
 /** dist2(l[WRIST], l[MIDDLE_MCP]); the scale reference every other feature is divided by. */
 export function handSize(l: HandLandmarks): number {
-  void l;
-  throw new Error("TODO Phase D: handSize (doc 04, M2)");
+  return dist2(l[Landmark.WRIST]!, l[Landmark.MIDDLE_MCP]!);
 }
 
 /** dist3(l[THUMB_TIP], l[INDEX_TIP]) / handSize. */
 export function pinchDist(l: HandLandmarks): number {
-  void l;
-  throw new Error("TODO Phase D: pinchDist (doc 04, M2)");
+  return dist3(l[Landmark.THUMB_TIP]!, l[Landmark.INDEX_TIP]!) / handSize(l);
 }
 
 /** Tip farther from wrist than PIP by FINGER_EXTENDED_RATIO. */
@@ -64,8 +62,24 @@ export function extendedCount(l: HandLandmarks): number {
 
 /** Mean of WRIST, INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP. */
 export function palmCenter(l: HandLandmarks): Point3 {
-  void l;
-  throw new Error("TODO Phase D: palmCenter (doc 04, M2)");
+  const ids = [Landmark.WRIST, Landmark.INDEX_MCP, Landmark.MIDDLE_MCP, Landmark.RING_MCP, Landmark.PINKY_MCP];
+  const sum = ids.reduce((acc, i) => ({ x: acc.x + l[i]!.x, y: acc.y + l[i]!.y, z: acc.z + l[i]!.z }), { x: 0, y: 0, z: 0 });
+  return { x: sum.x / ids.length, y: sum.y / ids.length, z: sum.z / ids.length };
+}
+
+/** Midpoint of THUMB_TIP and INDEX_TIP; the pinch cursor (M2 uses it as the only cursor until M3). */
+export function pinchMidpoint(l: HandLandmarks): Point3 {
+  const a = l[Landmark.THUMB_TIP]!;
+  const b = l[Landmark.INDEX_TIP]!;
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+}
+
+function dist2(a: Point3, b: Point3): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function dist3(a: Point3, b: Point3): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 /** Raw cursor: pinch midpoint while pinching, INDEX_TIP when pointing, else palmCenter. */

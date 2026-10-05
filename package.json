@@ -8,8 +8,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "pnpm --filter @grasp/web dev",
-    "build": "pnpm --filter @grasp/web build",
+    "assets:sync": "tsx scripts/assets/sync-public.ts",
+    "dev": "pnpm assets:sync && pnpm --filter @grasp/web dev",
+    "build": "pnpm assets:sync && pnpm --filter @grasp/web build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "vitest run",
     "content:validate": "tsx scripts/content/validate.ts",
@@ -21,7 +22,8 @@
     "db:migrate": "tsx scripts/db/migrate.ts",
     "db:seed": "tsx scripts/db/seed-dev.ts",
     "db:up": "docker compose -f infrastructure/docker-compose.yml up -d",
-    "db:down": "docker compose -f infrastructure/docker-compose.yml down"
+    "db:down": "docker compose -f infrastructure/docker-compose.yml --profile tutor down",
+    "tutor:up": "docker compose -f infrastructure/docker-compose.yml --profile tutor up -d ollama"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
