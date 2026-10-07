@@ -6,6 +6,8 @@
  * `?cv=main`); this panel only renders what comes back: cursor dot, HUD glyph, cv_status, event
  * console with counters, perf_sample, and the feature recorder for FSM fixtures.
  * Landmarks stay inside the vision path, so the M1 skeleton overlay is gone; the cursor remains.
+ * M6: interaction events are forwarded through `onVisionEvent`, and the vision handle is exposed through
+ * `onVisionReady` so the 3D scene can answer hover_result; without those props the M3 stub answers instead.
  */
 import type { CvStatus, InteractionEvent, PerfSample } from "@grasp/types";
 import {
@@ -19,6 +21,7 @@ import {
   type VisionMessage,
 } from "@grasp/vision";
 import { useEffect, useRef, useState } from "react";
+import { downloadJson } from "@/lib/download";
 
 type Status = "off" | "starting" | "running" | "no_camera" | "error";
 const LOG_LINES = 40;
@@ -64,7 +67,16 @@ function describe(e: InteractionEvent): string {
   return `${t} ${e.type}${extra}`;
 }
 
-export function CameraPanel() {
+export type CameraPanelProps = {
+  /** Every interaction event from the vision path (the prototype forwards them to the 3D scene). */
+  onVisionEvent?: (event: InteractionEvent) => void;
+  /** The running vision handle and camera resolution, or null when stopped; whoever holds it must answer hover_result. */
+  onVisionReady?: (handle: VisionHandle | null, camera?: { width: number; height: number }) => void;
+  /** Every 5 s perf_sample (M10 event log). */
+  onPerfSample?: (sample: PerfSample) => void;
+};
+
+export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: CameraPanelProps = {}) {
   const video = useRef<HTMLVideoElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
   const stopRef = useRef<() => void>(undefined);
@@ -105,18 +117,22 @@ export function CameraPanel() {
         if (m.state === "no_hand" && state !== "NO_HAND") setFsmState((state = "NO_HAND"));
         return;
       }
-      if (m.type === "perf_sample") return setPerf(m);
+      if (m.type === "perf_sample") {
+        onPerfSample?.(m);
+        return setPerf(m);
+      }
       if (m.type === "features") {
         recording.current?.push(toFixtureFrame(m.f, m.t));
         return;
       }
 
+      onVisionEvent?.(m);
       const next = STATE_AFTER[m.type];
       if (next && next !== state) setFsmState((state = next));
 
       if ("cursor" in m) {
-        // M3/M4 stub: everything is grabbable until M6 raycasts the scene.
-        handle?.postHoverResult({ type: "hover_result", hoveredId: null, isGrabbable: true, t: m.t ?? 0 });
+        // Standalone (no scene attached): treat everything as grabbable, the M3 stub.
+        if (!onVisionEvent) handle?.postHoverResult({ type: "hover_result", hoveredId: null, isGrabbable: true, t: m.t ?? 0 });
         // The cursor is already mirrored into viewport space, so this canvas is not CSS-flipped.
         if (c.width !== v.videoWidth) [c.width, c.height] = [v.videoWidth, v.videoHeight];
         ctx.clearRect(0, 0, c.width, c.height);
@@ -149,10 +165,12 @@ export function CameraPanel() {
       setDetail(err instanceof Error ? err.message : String(err));
       return;
     }
+    onVisionReady?.(handle, { width: v.videoWidth, height: v.videoHeight });
     setStatus("running");
     setDetail(`camera ${v.videoWidth}x${v.videoHeight}, path ${handle.path}, delegate ${handle.delegate}`);
 
     stopRef.current = () => {
+      onVisionReady?.(null);
       handle?.stop();
       stopCamera(stream);
       ctx.clearRect(0, 0, c.width, c.height);
@@ -179,12 +197,7 @@ export function CameraPanel() {
       note: "Recorded on /prototype. Features only, no landmarks. Add an `expect` block, e.g. { grabPairs: 20, tolerance: 2 }.",
       frames: frames.map((f) => ({ ...f, t: Math.round((f.t - t0) * 10) / 10 })),
     };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(fixture)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `features-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadJson(`features-${new Date().toISOString().replace(/[:.]/g, "-")}.json`, fixture);
   }
 
   const running = status === "running";

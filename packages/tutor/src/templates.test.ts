@@ -11,7 +11,7 @@ import {
   SEQUENCE_START_TEMPLATE,
   TASK_TYPES,
   fillTemplate,
-} from "./templates.js";
+} from "./templates";
 
 function placeholders(text: string): string[] {
   return [...text.matchAll(PLACEHOLDER_RE)].map((m) => m[1] as string);

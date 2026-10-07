@@ -29,7 +29,6 @@ export {
   palmCenter,
   pinchMidpoint,
   thumbExtended,
-  cursorFor,
   type Point3,
   type HandLandmarks,
   type Finger,

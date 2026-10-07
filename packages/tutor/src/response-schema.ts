@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { TutorResponse } from "@grasp/types";
-import { MAX_HINT_CHARS } from "./constants.js";
+import { MAX_HINT_CHARS } from "./constants";
 
 const componentId = z.string().regex(/^[a-z][a-z0-9_]*$/, "snake_case component id");
 

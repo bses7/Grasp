@@ -1,0 +1,62 @@
+{
+  "id": "anatomy.heart.prototype_v0",
+  "modelId": "heart_v1",
+  "title": "Prototype: put three parts of the heart back",
+  "estimatedMinutes": 5,
+  "difficulty": 1,
+  "objectives": [
+    {
+      "id": "obj_place_proto_parts",
+      "statement": "Place the aorta, pulmonary artery and left ventricle in their positions",
+      "bloom": "apply",
+      "masteryThreshold": 0.8
+    }
+  ],
+  "activities": [
+    {
+      "id": "act_guided_place",
+      "kind": "guided",
+      "title": "Put each part where it belongs",
+      "scene": {
+        "pose": "start",
+        "socketsVisible": true,
+        "socketVisual": "ring",
+        "allowOrbit": false,
+        "allowGrab": true
+      },
+      "tasks": [
+        {
+          "id": "t_p1",
+          "type": "place",
+          "objectiveId": "obj_place_proto_parts",
+          "prompt": "Put the aorta back where it leaves the heart.",
+          "hints": [],
+          "maxAttempts": 3,
+          "scoring": { "correct": 10, "partial": 3 },
+          "expect": { "componentId": "aorta", "socketId": "socket_aorta" }
+        },
+        {
+          "id": "t_p2",
+          "type": "place",
+          "objectiveId": "obj_place_proto_parts",
+          "prompt": "Put the pulmonary artery back where it leaves the heart.",
+          "hints": [],
+          "maxAttempts": 3,
+          "scoring": { "correct": 10, "partial": 3 },
+          "expect": { "componentId": "pulmonary_artery", "socketId": "socket_pulmonary_artery" }
+        },
+        {
+          "id": "t_p3",
+          "type": "place",
+          "objectiveId": "obj_place_proto_parts",
+          "prompt": "Put the left ventricle back in place.",
+          "hints": [],
+          "maxAttempts": 3,
+          "scoring": { "correct": 10, "partial": 3 },
+          "expect": { "componentId": "left_ventricle", "socketId": "socket_left_ventricle" }
+        }
+      ],
+      "completion": { "allTasks": true }
+    }
+  ]
+}

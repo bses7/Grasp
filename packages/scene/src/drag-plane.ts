@@ -92,6 +92,15 @@ export function moveGrab(grab: GrabState, ndc: Ndc, camera: Camera, zHintDelta: 
   grab.object.position.lerp(target, DRAG_LERP);
 }
 
+/**
+ * Recompute the grab offset from a new cursor so the component does not jump (doc 04 LOST rule:
+ * after tracking_regained the hand is rarely where it was when tracking dropped).
+ */
+export function rebaseGrab(grab: GrabState, ndc: Ndc, camera: Camera): void {
+  const hit = cursorRayHit(ndc, camera, grab.dragPlane);
+  if (hit) grab.grabOffset.copy(grab.object.position).sub(hit);
+}
+
 export type GrabEndResult = Extract<SceneEvent, { type: "place" } | { type: "drop" }>;
 
 /**

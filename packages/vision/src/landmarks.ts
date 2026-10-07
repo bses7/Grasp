@@ -79,7 +79,14 @@ export function palmCenter(l: HandLandmarks): Point3 {
   return { x: sum.x / ids.length, y: sum.y / ids.length, z: sum.z / ids.length };
 }
 
-/** Midpoint of THUMB_TIP and INDEX_TIP; the pinch cursor. */
+/**
+ * Midpoint of THUMB_TIP and INDEX_TIP: the one cursor source, in every gesture state.
+ * Doc 04 originally switched between INDEX_TIP (index extended), palmCenter (index folded) and this
+ * midpoint (pinching). The index curls 2-4 frames before a pinch confirms, so the switch made the cursor
+ * jump 0.16-0.29 frame widths, from fingertip to palm, at the moment of grab_start, and grabs missed
+ * (measured in fixtures/pinches-20.json and pinch-grab-object.json, 2026-10-07). One source never jumps,
+ * and it marks the spot where the pinch will close.
+ */
 export function pinchMidpoint(l: HandLandmarks): Point3 {
   const a = l[Landmark.THUMB_TIP]!;
   const b = l[Landmark.INDEX_TIP]!;
@@ -94,8 +101,3 @@ function dist3(a: Point3, b: Point3): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-/** Raw cursor: pinch midpoint while pinching, INDEX_TIP when pointing, else palmCenter. */
-export function cursorFor(l: HandLandmarks, pinchActive: boolean): Point3 {
-  if (pinchActive) return pinchMidpoint(l);
-  return fingerExtended(l, "index") ? l[Landmark.INDEX_TIP]! : palmCenter(l);
-}

@@ -20,7 +20,7 @@ export type LogTransport = (events: LogEvent[]) => Promise<void>;
  * - Never stores video, images, or raw landmark streams; only the event types
  *   enumerated in `LogEvent["type"]`.
  *
- * Phase D (M8).
+ * M10 implements the buffer; the network transport behind it is doc 13 Phase 4 (the prototype downloads).
  */
 export class LogBuffer {
   private readonly queue: LogEvent[] = [];
@@ -31,15 +31,19 @@ export class LogBuffer {
   ) {}
 
   push(event: LogEvent): void {
-    void event;
-    void this.queue;
-    void this.consent;
-    throw new Error("TODO Phase D: LogBuffer.push (doc 06, M8)");
+    if (!this.consent()) return;
+    this.queue.push(event);
   }
 
   async flush(): Promise<void> {
-    void this.transport;
-    throw new Error("TODO Phase D: LogBuffer.flush (doc 06, M8)");
+    if (this.queue.length === 0) return;
+    const batch = this.queue.splice(0, this.queue.length);
+    try {
+      await this.transport(batch);
+    } catch (err) {
+      this.queue.unshift(...batch); // keep them for the next flush; nothing is lost on a failed POST
+      throw err;
+    }
   }
 
   get size(): number {

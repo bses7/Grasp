@@ -28,7 +28,9 @@ export function buildCsp({ nonce, dev, assetOrigin }: CspOptions): string {
   const scriptSrc = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", "'wasm-unsafe-eval'"];
   if (dev) scriptSrc.push("'unsafe-eval'");
 
-  const connectSrc = ["'self'"];
+  // blob: lets GLTFLoader fetch the textures embedded in a .glb (it wraps each in a same-document blob URL).
+  // A blob URL can only read data this page already holds, so it opens no path off the device.
+  const connectSrc = ["'self'", "blob:"];
   const imgSrc = ["'self'", "data:", "blob:"];
   if (assetOrigin) {
     connectSrc.push(assetOrigin);

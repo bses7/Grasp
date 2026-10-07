@@ -114,3 +114,20 @@ describe("endGrab", () => {
     expect(nearestAcceptingSocket(obj, SOCKETS, { socket_aorta: null })?.id).toBe("socket_aorta");
   });
 });
+
+describe("rebaseGrab (tracking regained mid-drag)", () => {
+  it("keeps the component where it is when the hand comes back somewhere else", async () => {
+    const { rebaseGrab } = await import("./drag-plane");
+    const { camera, obj } = setup();
+    const grab = beginGrab("aorta", obj, ndcOf(camera, -10, 5), camera, {})!;
+    for (let i = 0; i < 20; i++) moveGrab(grab, ndcOf(camera, -6, 5), camera, 0);
+    const before = obj.position.clone();
+    // hand reappears 8 units to the right of where it was lost
+    rebaseGrab(grab, ndcOf(camera, 2, 5), camera);
+    moveGrab(grab, ndcOf(camera, 2, 5), camera, 0);
+    expect(obj.position.distanceTo(before)).toBeLessThan(1e-6);
+    // and then follows the new hand position relative to that point
+    for (let i = 0; i < 20; i++) moveGrab(grab, ndcOf(camera, 4, 5), camera, 0);
+    expect(obj.position.x).toBeCloseTo(before.x + 2, 2);
+  });
+});

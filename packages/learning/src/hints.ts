@@ -27,5 +27,5 @@ export const FALLBACK_HINT_TEMPLATE = "That was the {actualName}. Look for a dif
 export function nextHint(task: Task, hintsUsed: number): Hint | null {
   void task;
   void hintsUsed;
-  throw new Error("TODO Phase D: nextHint (doc 06, M8)");
+  throw new Error("TODO Phase D: nextHint (doc 06, doc 13 Phase 4: hint ladder)");
 }

@@ -8,7 +8,7 @@
  * Correctness is decided by the learning engine comparing { componentId,
  * socketId } to the task's expect block. This file never decides it.
  */
-import type { Socket } from "@grasp/types";
+import type { Socket, Transform } from "@grasp/types";
 import { Euler, Quaternion, Vector3, type Object3D } from "three";
 
 export type SocketOccupancy = Record<string, string | null>;
@@ -49,10 +49,15 @@ export function snapTo(
   durationMs: number,
   onStep: () => void,
 ): Promise<void> {
+  return tweenTo(component, socket.transform, durationMs, onStep);
+}
+
+/** Ease-out tween of position and rotation to `to`; used by snap (150 ms) and reset (400 ms). */
+export function tweenTo(component: Object3D, to: Transform, durationMs: number, onStep: () => void): Promise<void> {
   const fromPos = component.position.clone();
   const fromRot = component.quaternion.clone();
-  const toPos = new Vector3(...socket.transform.position);
-  const toRot = new Quaternion().setFromEuler(new Euler(...socket.transform.rotation));
+  const toPos = new Vector3(...to.position);
+  const toRot = new Quaternion().setFromEuler(new Euler(...to.rotation));
   return new Promise((resolve) => {
     const start = performance.now();
     const step = (now: number) => {

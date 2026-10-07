@@ -28,25 +28,33 @@ export const GRADED_ACTIVITY_KINDS: ReadonlyArray<Activity["kind"]> = ["guided",
  * `{ allTasks: true }` every task correct or marked failed;
  * `{ minCorrect: n }` at least n tasks correct;
  * `{ time: s }` at least s seconds elapsed in the activity.
- * Phase D (M8).
  */
 export function isActivityComplete(activity: Activity, attempts: AttemptRecord[], elapsedMs: number): boolean {
-  void activity;
-  void attempts;
-  void elapsedMs;
-  throw new Error("TODO Phase D: isActivityComplete (doc 06, M8)");
+  const c = activity.completion;
+  if ("allTasks" in c) return activity.tasks.every((t) => taskStatus(activity, t, attempts) !== "open");
+  if ("minCorrect" in c) return activity.tasks.filter((t) => taskStatus(activity, t, attempts) === "correct").length >= c.minCorrect;
+  return elapsedMs >= c.time * 1000;
 }
 
-/** First task in `activity` that is neither correct nor failed, or `null`. Phase D (M8). */
+/** `maxAttempts` for a task, falling back to the activity-kind default (docs/06 "Faded guidance"). */
+export function maxAttemptsFor(activity: Activity, task: Task): number {
+  return task.maxAttempts ?? DEFAULT_MAX_ATTEMPTS[activity.kind];
+}
+
+/** A task is correct once any attempt is correct, failed once its attempts are used up, else open. */
+export function taskStatus(activity: Activity, task: Task, attempts: AttemptRecord[]): "correct" | "failed" | "open" {
+  const mine = attempts.filter((a) => a.taskId === task.id && !a.microTask);
+  if (mine.some((a) => a.outcome === "correct")) return "correct";
+  return mine.length >= maxAttemptsFor(activity, task) ? "failed" : "open";
+}
+
+/** First task in `activity` that is neither correct nor failed, or `null`. */
 export function nextTask(activity: Activity, attempts: AttemptRecord[]): Task | null {
-  void activity;
-  void attempts;
-  throw new Error("TODO Phase D: nextTask (doc 06, M8)");
+  return activity.tasks.find((t) => taskStatus(activity, t, attempts) === "open") ?? null;
 }
 
-/** The activity after `currentId` in lesson order, or `null` after `mastery`. Phase D (M8). */
+/** The activity after `currentId` in lesson order, or `null` after the last one. */
 export function nextActivity(lesson: Lesson, currentId: string): Activity | null {
-  void lesson;
-  void currentId;
-  throw new Error("TODO Phase D: nextActivity (doc 06, M8)");
+  const i = lesson.activities.findIndex((a) => a.id === currentId);
+  return i >= 0 ? (lesson.activities[i + 1] ?? null) : null;
 }

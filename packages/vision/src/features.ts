@@ -6,12 +6,12 @@
 import { VISION_CONSTANTS, type OneEuroParams } from "./constants";
 import type { GestureFeatures } from "./gesture-fsm";
 import {
-  cursorFor,
   extendedCount,
   fingerExtended,
   handSize,
   palmCenter,
   pinchDist,
+  pinchMidpoint,
   thumbExtended,
   type Point3,
 } from "./landmarks";
@@ -31,18 +31,10 @@ export class FeatureExtractor {
     this.cy = new OneEuroFilter(cursorParams);
   }
 
-  /**
-   * @param pinchActive the FSM is in GRABBING, DRAGGING or LOST; selects the pinch-midpoint cursor
-   * @returns features plus the smoothed landmarks (for a debug overlay only; never logged)
-   */
-  extract<T extends Point3>(
-    hand: readonly T[],
-    presence: number,
-    pinchActive: boolean,
-    t: number,
-  ): { features: GestureFeatures; smoothed: T[] } {
+  /** @returns features plus the smoothed landmarks (for a debug overlay only; never logged) */
+  extract<T extends Point3>(hand: readonly T[], presence: number, t: number): { features: GestureFeatures; smoothed: T[] } {
     const l = this.smoother.filter(hand, t);
-    const raw = cursorFor(l, pinchActive);
+    const raw = pinchMidpoint(l); // the only cursor source; see pinchMidpoint for why
     const cursor = {
       // Mirrored so the cursor moves with the learner (mediapipe-hands section 2), clamped to the viewport.
       x: clamp01(1 - this.cx.filter(raw.x, t)),

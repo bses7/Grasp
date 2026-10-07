@@ -58,7 +58,11 @@ export type SceneState = {
 /** Commands the engine issues to the scene. They carry no lesson logic. */
 export type SceneCommand =
   | { type: "setPose"; pose: string }
-  | { type: "highlight"; ids: string[]; durationMs?: number }
+  /**
+   * Without `style`: the hint pulse (doc 13 Phase 4). With an outcome style: one feedback tint at the
+   * component (doc 11 feedback vocabulary); the engine decided the outcome, the scene only shows it.
+   */
+  | { type: "highlight"; ids: string[]; durationMs?: number; style?: "correct" | "partial" | "incorrect" }
   /** target is a componentId or hotspotId. */
   | { type: "cameraTo"; target: string }
   | { type: "setSocketVisual"; socketId: string; visual: SocketVisual }

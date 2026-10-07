@@ -1,5 +1,5 @@
 import type { Lesson, ModelManifest, TutorRequest, TutorResponse } from "@grasp/types";
-import type { TutorService } from "./tutor-service.js";
+import type { TutorService } from "./tutor-service";
 
 export type TemplateTutorServiceOptions = {
   /** Loaded by the caller from @grasp/content by req.lessonId; the request never supplies vocabulary. */

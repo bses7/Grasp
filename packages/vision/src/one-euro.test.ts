@@ -82,3 +82,33 @@ describe("JitterMeter", () => {
     expect(j).toBeNull();
   });
 });
+
+describe("FeatureExtractor cursor", () => {
+  /** Open hand with thumb and index tips 0.1 apart; `indexCurled` folds the index tip back toward the wrist. */
+  function handWith(indexCurled: boolean) {
+    const l: Point3[] = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.8, z: 0 }));
+    l[Landmark.MIDDLE_MCP] = { x: 0.5, y: 0.6, z: 0 };
+    l[Landmark.INDEX_PIP] = { x: 0.45, y: 0.5, z: 0 };
+    l[Landmark.INDEX_TIP] = indexCurled ? { x: 0.45, y: 0.55, z: 0 } : { x: 0.45, y: 0.4, z: 0 };
+    l[Landmark.THUMB_TIP] = indexCurled ? { x: 0.4, y: 0.55, z: 0 } : { x: 0.35, y: 0.45, z: 0 };
+    return l;
+  }
+
+  it("does not jump to the palm when the index curls as a pinch closes", async () => {
+    const { FeatureExtractor } = await import("./features");
+    const { pinchMidpoint } = await import("./landmarks");
+    const open = handWith(false);
+    const curling = handWith(true);
+    // The old rule moved the cursor from the index tip to the palm centre (y ≈ 0.8) here.
+    for (const l of [open, curling]) {
+      const fx = new FeatureExtractor();
+      const { features } = fx.extract(l, 1, 0);
+      const mid = pinchMidpoint(l);
+      expect(features.cursor.x).toBeCloseTo(1 - mid.x); // mirrored
+      expect(features.cursor.y).toBeCloseTo(mid.y);
+    }
+    const fx = new FeatureExtractor();
+    expect(fx.extract(open, 1, 0).features.extended.index).toBe(true);
+    expect(new FeatureExtractor().extract(curling, 1, 0).features.extended.index).toBe(false);
+  });
+});

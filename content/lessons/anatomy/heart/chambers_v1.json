@@ -62,7 +62,7 @@
           "scoring": { "correct": 10, "hintPenalty": 2 },
           "hints": [
             { "level": 1, "text": "Atria are the upper chambers." },
-            { "level": 2, "tutor": true },
+            { "level": 2, "tutor": true, "highlight": ["right_atrium", "left_atrium"], "text": "It is the upper chamber on the learner's left when facing the heart." },
             { "level": 3, "highlight": ["right_atrium"] }
           ]
         },
@@ -76,8 +76,8 @@
           "scoring": { "correct": 15, "partial": 5, "hintPenalty": 3 },
           "hints": [
             { "level": 1, "text": "The aorta leaves from the left ventricle at the top." },
-            { "level": 2, "highlight": ["socket_aorta"] },
-            { "level": 3, "tutor": true }
+            { "level": 2, "highlight": ["left_ventricle"], "text": "Its socket is right above the highlighted left ventricle." },
+            { "level": 3, "tutor": true, "highlight": ["aorta"], "text": "This is the aorta. Pinch it and drop it into the socket at the top of the heart, above the left ventricle." }
           ]
         }
       ],

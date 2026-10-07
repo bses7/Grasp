@@ -34,7 +34,7 @@ export function shouldRemediate(
   void attemptsMade;
   void maxAttempts;
   void alreadyRemediated;
-  throw new Error("TODO Phase D: shouldRemediate (doc 06, M8)");
+  throw new Error("TODO Phase D: shouldRemediate (doc 06, doc 13 Phase 4)");
 }
 
 /**
@@ -44,5 +44,5 @@ export function shouldRemediate(
  */
 export function synthesiseMicroTask(task: Task): Task {
   void task;
-  throw new Error("TODO Phase D: synthesiseMicroTask (doc 06, M8)");
+  throw new Error("TODO Phase D: synthesiseMicroTask (doc 06, doc 13 Phase 4)");
 }

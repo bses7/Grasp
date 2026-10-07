@@ -12,7 +12,7 @@ Camera to interaction events. Runs MediaPipe Tasks Vision `HandLandmarker` in a 
 | Milestone | Files | Delivers |
 |---|---|---|
 | M1 camera and landmarks | `worker/hand-landmarker.worker.ts` (init path), `constants.ts` | `HandLandmarker` init with self-hosted WASM and `.task`, 640x360 capture, `initialising` / `ok` / `no_hand` status line |
-| M2 One-Euro and cursor | `one-euro.ts`, `landmarks.ts` | Filter class with unit tests; `handSize`, `pinchDist`, `palmCenter`, `cursorFor`; `beta` 5.0 settled empirically |
+| M2 One-Euro and cursor | `one-euro.ts`, `landmarks.ts` | Filter class with unit tests; `handSize`, `pinchDist`, `palmCenter`, `pinchMidpoint` (the sole cursor source since 2026-10-07); `beta` 5.0 settled empirically |
 | M3 pinch FSM | `gesture-fsm.ts`, `gesture-fsm.test.ts` | `NO_HAND`, `IDLE`, `GRABBING`, `DRAGGING`, `LOST` with hysteresis and hold frames; fixture-replay tests; `HOVER` and `point` / `open_palm` classification follow the Phase 3 stop/go |
 | M4 worker and perf | `worker/hand-landmarker.worker.ts`, `worker-client.ts`, `cv-status.ts` | Transferred `ImageBitmap`s, `OffscreenCanvas` feature-detect, alternate-frame main-thread fallback, `cv_status` channel, `perf_sample` fields |
 | M5 mouse path | `mouse-adapter.ts` | Identical event stream from pointer events for the control condition (placed here per doc 16) |

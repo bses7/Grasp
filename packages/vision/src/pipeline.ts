@@ -78,7 +78,7 @@ export class VisionPipeline {
     let features: GestureFeatures | null = null;
     let jitter: number | null = null;
     if (usable) {
-      features = this.extractor.extract(usable.l, usable.presence, this.fsm.pinchActive, t).features;
+      features = this.extractor.extract(usable.l, usable.presence, t).features;
     } else {
       this.extractor.reset();
     }

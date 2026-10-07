@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTutorResponse, tutorResponseSchema } from "./response-schema.js";
+import { parseTutorResponse, tutorResponseSchema } from "./response-schema";
 
 describe("tutorResponseSchema", () => {
   it("parses a minimal valid response", () => {

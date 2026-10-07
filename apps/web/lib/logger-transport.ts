@@ -9,7 +9,8 @@
  * - Drop everything when sessionStore.consent.logging is false.
  * - Never carries landmarks or video; LogEvent is interaction and learning data only.
  *
- * TODO Phase D M10 (event log): implement; the prototype milestone downloads the
+ * TODO Phase D, doc 13 Phase 4 (network logging): implement. M10 ships the in-memory SessionLogger and a JSON
+ * download instead; this transport is what Phase 4 plugs into LogBuffer. The prototype milestone downloads the
  * buffer as JSON and only doc 13 Phase 4 turns on the network path.
  */
 export type LoggerTransport = {

@@ -117,7 +117,7 @@ Content-Security-Policy:
   default-src 'self';
   script-src 'self' 'nonce-<per-request>' 'strict-dynamic' 'wasm-unsafe-eval';
   worker-src 'self' blob:;
-  connect-src 'self' https://cdn.<your-domain>;
+  connect-src 'self' blob: https://cdn.<your-domain>;
   img-src 'self' blob: data:;
   media-src 'self' blob:;
   font-src 'self';
@@ -138,7 +138,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 | `script-src 'nonce-…' 'strict-dynamic'` | The App Router hydrates through inline scripts, so `'self'` alone blocks every page (found at M0). Next.js reads the nonce from the request's CSP header and tags its own scripts; this requires every page to render dynamically (`await connection()` in the root layout). Avoids `'unsafe-inline'` for scripts | **MVP** |
 | `script-src 'wasm-unsafe-eval'` | Required for `WebAssembly.instantiate`; avoids the far broader `'unsafe-eval'`. Next.js dev mode needs `'unsafe-eval'`; add it only when `NODE_ENV !== "production"` | **MVP** |
 | `worker-src 'self' blob:` | The vision worker is bundled from the same origin; some bundlers load workers through blob URLs | **MVP** |
-| `connect-src` | Own origin for route handlers plus the CDN host for GLB, Draco, `.task`, and WASM. No third-party API is called from the browser or the server in **MVP**, so nothing else appears. This single line is the structural guarantee that video cannot be posted anywhere unexpected. A **V1** WebLLM engine would need its model files self-hosted under the same origin or CDN host, not fetched from a public hub, to keep this line unchanged | **MVP** |
+| `connect-src` | Own origin for route handlers plus the CDN host for GLB, Draco, `.task`, and WASM. No third-party API is called from the browser or the server in **MVP**, so nothing else appears. This single line is the structural guarantee that video cannot be posted anywhere unexpected. `blob:` is added (2026-10-07, found at M9) because three.js `GLTFLoader` fetches each texture embedded in a .glb through a same-document blob URL; a blob URL reads only data the page already holds and cannot reach any server, so the guarantee is unchanged. A **V1** WebLLM engine would need its model files self-hosted under the same origin or CDN host, not fetched from a public hub, to keep this line unchanged | **MVP** |
 | `style-src 'unsafe-inline'` | Drei `Html` and R3F inject inline styles. Replace with a nonce if a later audit requires; low priority because there is no user-generated HTML | **MVP** |
 | COOP/COEP | Not set. The default MediaPipe Tasks Vision WASM does not require `SharedArrayBuffer`. If a multi-threaded build is adopted for speed, `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` become necessary and the CDN must send `Cross-Origin-Resource-Policy: cross-origin` | **V1** if needed |
 | `Permissions-Policy: camera=(self)` | Camera available to this origin only, never to embedded frames | **MVP** |

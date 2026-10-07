@@ -56,7 +56,7 @@ export class GestureFsm {
   /** A pinch refused by the grabbable rule must be released before another can start a grab. */
   private pinchRejected = false;
 
-  /** True in GRABBING, DRAGGING and LOST: feature extraction uses the pinch-midpoint cursor. */
+  /** True in GRABBING, DRAGGING and LOST: the pinch uses the exit threshold (hysteresis). */
   get pinchActive(): boolean {
     return this.state === "GRABBING" || this.state === "DRAGGING" || this.state === "LOST";
   }

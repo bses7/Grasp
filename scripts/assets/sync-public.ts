@@ -3,10 +3,11 @@
  *   - MediaPipe WASM from the installed @mediapipe/tasks-vision  -> public/mediapipe/<version>/wasm/
  *   - hand_landmarker.task, downloaded once from its pinned URL -> public/mediapipe/<version>/
  *   - Draco decoder from the installed three                    -> public/draco/
+ *   - compressed models from models/<id>/*.glb                  -> public/models/<id>/
  * Idempotent: skips the download when the file exists. Runs before `pnpm dev` and `pnpm build`,
  * so the app itself never fetches from a third-party origin at runtime.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   HAND_LANDMARKER_TASK_SOURCE,
@@ -48,4 +49,14 @@ for (const f of ["draco_decoder.js", "draco_decoder.wasm", "draco_wasm_wrapper.j
   cpSync(join(dracoSrc, f), join(pub, "draco", f));
 }
 
-console.log(`assets synced: mediapipe ${MEDIAPIPE_VERSION}, draco`);
+// Compressed models: models/<id>/*.glb (committed) -> public/models/<id>/ (served at NEXT_PUBLIC_ASSET_BASE_URL).
+const models: string[] = [];
+for (const id of readdirSync(join(root, "models"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
+  for (const f of readdirSync(join(root, "models", id)).filter((f) => f.endsWith(".glb"))) {
+    mkdirSync(join(pub, "models", id), { recursive: true });
+    cpSync(join(root, "models", id, f), join(pub, "models", id, f));
+    models.push(`${id}/${f}`);
+  }
+}
+
+console.log(`assets synced: mediapipe ${MEDIAPIPE_VERSION}, draco, models ${models.join(", ") || "(none)"}`);

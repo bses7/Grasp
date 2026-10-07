@@ -224,7 +224,7 @@ Poor light looks like intermittent detection: presence mean below 0.7 over 2 s o
 
 An interface error, never a domain error. The HUD detects a mismatch between gesture and task affordance: a `point` dwell completing on a grabbable during `place`, a `pinch` on a non-grabbable during `identify`, or a `grab_start` with no `grab_move` within 300 ms (a false start). The cursor ring turns dashed and a label beside it names the expected gesture, "Pinch to grab" or "Point to select", in `accent`, never `error`; the correct gesture clears it. The third occurrence on one task adds the glyph to the instruction line and offers, not forces, a 20 s replay of the matching calibration prompt. Nothing is scored and no hint level advances. The false-start rate per participant is a direct measure of the extraneous load argued in [01](01-product-definition.md#educational-value-why-cv-controlled-3d-could-beat-2d-and-where-it-may-not) and is reported beside learning gain. In the mouse condition the same pattern is "wrong input", for example clicking a non-grabbable during `place`, with the same label. **MVP**.
 
-| Logged | `gesture_emit` transitions, `grab_start`/`grab_end` pairs from which false starts are derived, `select { method }`; `misfire_report` is **V1** |
+| Logged | `gesture_emit` transitions, `grab_move_summary.firstMoveMs` (null or > 300 ms is a false start, [14 §2.1](14-evaluation-methodology.md)), `select { method }`; `misfire_report` is **V1** |
 |---|---|
 | Never | Render in `error` colour; emit `task_attempt`; advance `nextHintLevel`; let the tutor treat it as a knowledge gap; reset the part or the camera without the learner's action |
 

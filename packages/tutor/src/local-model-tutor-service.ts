@@ -1,5 +1,5 @@
 import type { TutorRequest, TutorResponse } from "@grasp/types";
-import type { TutorService } from "./tutor-service.js";
+import type { TutorService } from "./tutor-service";
 
 export type LocalModelTutorServiceOptions = {
   /** Base URL of the local model server, from TUTOR_LOCAL_URL in the caller's environment. Never a hosted host. */

@@ -45,9 +45,9 @@ export type LogEvent = {
  * hint_shown        { taskId, level, source: "static" | "tutor" }
  * mastery_computed  { objectiveId, mastery, threshold }
  * time_prompt       { lessonMs, activityId, taskId, choice: "continue" | "assess" }   // once, at 15 min
- * select            { componentId, hotspotId, method: "grab" | "dwell" | "click" }
- * grab_start        { componentId }            // null when orbiting empty space
- * grab_move_summary { componentId, durationMs, pathLengthNorm, zHintAbsSum }   // one per drag, on grab_end
+ * select            { componentId, hotspotId, method: "grab" | "dwell" | "click" }   // absent id logged as null
+ * grab_start        { componentId }            // null = no component hit: orbit if the drag moved (firstMoveMs != null), else a miss
+ * grab_move_summary { componentId, durationMs, pathLengthNorm, zHintAbsSum, firstMoveMs }   // one per drag, on grab_end; firstMoveMs null = never moved (M10, false-start rate)
  * grab_end          { componentId, reason: "release" | "lost" }
  * place             { componentId, socketId }
  * drop              { componentId, cause: "release" | "lost" }   // cause:"lost" drops are logged, never graded
@@ -56,9 +56,9 @@ export type LogEvent = {
  * calibration_prompt{ promptNo, expectedGesture, windowMs }
  * tracking_regained { durationMs }
  * hand_count        { n }
- * tutor_message     { role: "user" | "assistant", taskId, chars, latencyMs, cached }   // never the text
+ * tutor_message     { interactionId, taskId, kind, hintLevel, status, latencyMs, source }   // never the text; enums owned by doc 07
  * perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate, path }   // see PerfSample
- * device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }
+ * device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // gpuTier null in the prototype; camera fields null and workerPath false for mouse
  */
 
 /**

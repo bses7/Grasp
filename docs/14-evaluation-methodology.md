@@ -8,7 +8,7 @@ This file turns Grasp into a measurement instrument. It defines every metric as 
 |---|---|---|---|
 | RQ1 (learning) | Does gesture-based 3D interaction produce higher post-test and one-week retention scores than mouse-based interaction on the identical lesson? | Post-test and retention score, pre-test as covariate | **MVP** pilot, **V1** main |
 | RQ2 (process) | Do interaction patterns (time per task, error types, hint use) differ between conditions, and do they mediate learning gain? | Task-level event-log metrics | **MVP** pilot, **V1** main |
-| RQ3 (usability and load) | How do SUS and NASA-TLX compare, and does tracking quality predict either? | SUS, raw TLX, tracking-lost seconds, false-start rate | **MVP** pilot, **V1** main |
+| RQ3 (usability and load) | How do SUS and NASA-TLX compare, and does tracking quality predict either? | SUS, raw TLX, tracking-lost seconds, false-start rate (`grab_move_summary.firstMoveMs` null or > 300 ms; section 2.1) | **MVP** pilot, **V1** main |
 
 The mouse condition (locked position 8) is non-negotiable. The intervention bundles two things: an interactive 3D model with declarative evaluation, and embodied gesture input. Without a control that keeps the first and removes the second, any gain is attributable to "interactive 3D" in general, which is already well studied, and the study says nothing about gesture control. Both conditions run the same lesson JSON, GLB, engine, tutor and feedback. Only the input layer differs.
 
@@ -29,7 +29,7 @@ These apply to the gesture condition only. The mouse condition emits no `trackin
 | Gesture accuracy | `TP / n(calibration_prompt)` where TP = windows whose first `gesture_emit.gesture == expectedGesture` | ≥ 0.90 in pilot | **MVP** |
 | Precision (per gesture g) | `TP_g / (TP_g + FP_g)`; `FP_g` = windows where first emit is `g` but `expectedGesture != g`, plus `gesture_emit` of `g` outside any window during calibration | ≥ 0.90 for `pinch`, `release` | **MVP** |
 | Recall (per gesture g) | `TP_g / n(calibration_prompt where expectedGesture == g)` | ≥ 0.90 | **MVP** |
-| False-positive rate (in lesson, proxy) | `falseStarts / n(grab_start)` where falseStart = `grab_start` with no `grab_move` within 300 ms and a `grab_end` before any `grab_move` | ≤ 0.10 | **MVP** |
+| False-positive rate (in lesson, proxy) | `falseStarts / n(grab_move_summary)`, over closed grabs only (numerator and denominator both from `grab_move_summary`, so a grab still open at session end counts in neither), gesture condition only (the replay script prints n/a for mouse logs); falseStart = a `grab_move_summary` with `firstMoveMs == null` (never moved) or `firstMoveMs > 300` (no `grab_move` within 300 ms, the rule in [15](15-risks-security-scalability.md) challenge 10). `durationMs` and `pathLengthNorm` cannot express this: a drag that first moves at 400 ms has a non-zero path yet is a false start. Implemented as `FALSE_START_MS` and `falseStartRate()` in `packages/learning/src/logger.ts`; `scripts/research/replay-log.ts` reports it per session | ≤ 0.10 | **MVP** |
 | False-positive rate (reported) | `n(misfire_report) / (n(grab_start) + n(select))` | report only | **V1** |
 | Tracking stability: lost rate | `n(tracking_lost) / (T / 60000)` per minute | ≤ 2 per min | **MVP** |
 | Tracking stability: lost fraction | `Σ tracking_regained.payload.durationMs / T` | ≤ 0.05 | **MVP** |
@@ -38,7 +38,7 @@ These apply to the gesture condition only. The mouse condition emits no `trackin
 | End-to-end latency | median of `perf_sample.e2eMsP50`: bitmap capture timestamp to scene apply timestamp, measured in the main thread | p50 ≤ 100 ms | **MVP** |
 | Effective frame rate | mean `perf_sample.fps`; `n(hand_count where n > 1)` reported alongside | ≥ 30 | **MVP** |
 
-Limitation: calibration accuracy is measured once on a cooperative hand and overstates in-lesson accuracy. The false-start proxy undercounts false positives followed by a drag. Both are reported as such.
+Limitation: calibration accuracy is measured once on a cooperative hand and overstates in-lesson accuracy. The false-start proxy undercounts false positives followed by a drag. It also overcounts deliberate pinch-to-select: a `select` with `method: "grab"` in an `identify` task never moves, so it counts as a false start. Once identify tasks exist (Phase 4), the analysis restricts the rate to grabs with `componentId != null` during `place` tasks; the prototype has only place tasks, so the bias is absent there. Both limitations are reported as such.
 
 ### 2.2 3D Interaction metrics
 
@@ -52,7 +52,7 @@ Apply to both conditions. The mouse condition maps pointer events to the same in
 | Task completion time | per task: `t(task_end) − t(task_start)`; session: median over tasks, reported by task type | **MVP** |
 | Time to first attempt | `t(first task_attempt for taskId) − t(task_start)`; separates "thinking" from "doing" | **MVP** |
 | Attempts per task | `n(task_attempt for taskId)`; mean over tasks completed | **MVP** |
-| Orbit use | `n(grab_start where payload.componentId == null)` and summed `grab_move_summary.durationMs` | **MVP** |
+| Orbit use | `n(grab_move_summary where componentId == null and firstMoveMs != null)` (the hand moved, so it orbited) and the summed `durationMs` of those summaries. Misses are reported separately: `n(grab_move_summary where componentId == null and firstMoveMs == null)`. Once orbit ships, every no-hit pinch is an orbit ([05](05-3d-interaction.md)), so the split comes from movement, with no extra field. The M10 prototype has no orbit, so there every null `componentId` is a miss | **MVP** |
 
 Limitation: gesture-condition task time includes time lost to tracking failures. Report raw time and active time (`raw − Σ tracking_regained.durationMs` within the task); active time is the pre-registered primary.
 
@@ -195,9 +195,9 @@ type LogEvent = {
 // hint_shown        { taskId, level, source: "static" | "tutor" }
 // mastery_computed  { objectiveId, mastery, threshold }
 // time_prompt       { lessonMs, activityId, taskId, choice: "continue" | "assess" }   // once, at 15 min of lesson time
-// select            { componentId, hotspotId, method: "grab" | "dwell" | "click" }
-// grab_start        { componentId }            // null when orbiting empty space
-// grab_move_summary { componentId, durationMs, pathLengthNorm, zHintAbsSum }   // one per drag, on grab_end
+// select            { componentId, hotspotId, method: "grab" | "dwell" | "click" }   // absent id logged as null (M10)
+// grab_start        { componentId }            // null = no component hit; orbit if its grab_move_summary.firstMoveMs != null, miss if null (see Orbit use, 2.2); prototype has no orbit
+// grab_move_summary { componentId, durationMs, pathLengthNorm, zHintAbsSum, firstMoveMs }   // one per drag, on grab_end; firstMoveMs = int ms from grab_start to first grab_move, null if never moved (added 2026-10-07, M10, false-start rate)
 // grab_end          { componentId, reason: "release" | "lost" }   // union owned by doc 04
 // place             { componentId, socketId }
 // drop              { componentId, cause: "release" | "lost" }   // cause owned by doc 05; position omitted: not needed for any metric
@@ -207,8 +207,8 @@ type LogEvent = {
 // tracking_regained { durationMs }
 // hand_count        { n }
 // tutor_message     { interactionId, taskId, kind, hintLevel, status, latencyMs, source }   // never the text; enums owned by doc 07 (kind: hint | explain_mistake in MVP; source: tutor | static)
-// perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate }
-// device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }
+// perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate, path: "worker" | "main_thread_fallback" | null }
+// device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // gpuTier null in the prototype: no GPU fingerprinting yet; decide before the pilot. Mouse arm: cameraWidth/cameraHeight null, workerPath false and meaningless
 ```
 
 Rules the schema enforces: no landmark coordinates anywhere; `grab_move` is summarised per drag, not per frame (a cursor trail would reconstruct hand motion and is a privacy and volume problem); neither tutor text nor the `SceneState` request enters the research log; the consent-gated `request_json` and `delivered_text` live only in the `ai_interactions` table in [09-database.md](09-database.md), written server-side by the route handler, and are joined to the event log through `tutor_message.interactionId`; `drop` carries no position. The tutor runs inside the `/api/tutor` route handler with no third-party egress ([07-ai-tutor.md](07-ai-tutor.md)), so no tutor data leaves the researcher's own deployment.

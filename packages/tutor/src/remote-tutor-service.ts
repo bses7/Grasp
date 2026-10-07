@@ -1,5 +1,5 @@
 import type { TutorRequest, TutorResponse } from "@grasp/types";
-import type { TutorService } from "./tutor-service.js";
+import type { TutorService } from "./tutor-service";
 
 export type RemoteTutorServiceOptions = {
   /** Base URL of the Python service, from TUTOR_SERVICE_URL in the caller's environment. */

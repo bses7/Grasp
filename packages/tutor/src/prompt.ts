@@ -5,7 +5,7 @@
  * server accepts. No caching fields, no effort or thinking settings.
  */
 import type { Lesson, ModelManifest, TutorRequest } from "@grasp/types";
-import { MAX_HINT_CHARS } from "./constants.js";
+import { MAX_HINT_CHARS } from "./constants";
 
 export type LocalModelMessage = { role: "system" | "user"; content: string };
 

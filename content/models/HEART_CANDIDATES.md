@@ -52,3 +52,28 @@ Excluded: CU Anschutz and UMCG/Dundee scans (CC BY-NC-SA, non-commercial clause)
 - NIH entry #8 format, size, and quality.
 - BodyParts3D offers no chamber subdivision beyond ventricular and atrial walls; a `septum` would need to be cut from the ventricular wall.
 - Whether CC BY-SA 2.1 JP adaptations may be relicensed to CC BY-SA 4.0 (Z-Anatomy does so; not checked against the licence text).
+
+## Verified after download (2026-10-07)
+
+Downloaded candidates live in `content/source/heart_candidates/` (git-ignored). Inspected with `/dev/model/heart_v1`.
+
+| Candidate | File | Size | Triangles | Parts | Finding |
+|---|---|---|---|---|---|
+| #2 Freddan755 | `human_heart.glb` | 7.4 MB (5.0 MB of it PNG textures) | 54,452 | 11 meshes, 10 materials | **Selected.** `gltf-transform optimize --compress draco --texture-compress webp --texture-size 1024 --join false --flatten false --simplify false --instance false` gives 0.9 MB with all 11 parts and all triangles. |
+| #1 Haiqa Arif | `human heart.glb` | 12.7 MB | 364,698 | 1 mesh | AI-generated (Tripo); one shell; rejected |
+| #5 Pigcraft | `anatomically_correct_human_heart.glb` | 67.9 MB | 1,000,046 | 14 meshes, all named `tripo_node_…` | AI-generated (Tripo); arbitrary chunks, not anatomy; rejected |
+| jalmer, Beating-heart (CC BY 4.0, not in the shortlist) | `beating-heart.glb` | 5.5 MB | 34,401 | 1 mesh + animation | One shell; rejected for MVP (animation reference only) |
+
+First identification of the #2 parts (to confirm on the review page): `Line001` aorta, `Line002` pulmonary_artery, `Object001` left_ventricle, `Object002` right_ventricle, `Line010` inferior_vena_cava, `Line003` superior_vena_cava (medium), `Line007`/`Line008`/`Line009`/`Line8` pulmonary_veins (medium), `Box002` remaining body (scenery). There are no separate atria or septum meshes; M9 needs only aorta, pulmonary_artery and left_ventricle, which are separate.
+
+Attribution: "Heart model: 'Human heart' by Freddan755, Sketchfab, CC BY 4.0. Modified: renamed parts, compressed."
+
+### #9 checked (2026-10-07): "Human heart for Cycles" by elZancudo
+
+`content/source/heart_candidates/human-heart-for-cycles/Human_heart.blend`, CC BY 3.0 (credit "elZancudo"). Objects: `Aorta`, `Ventriculos` (both ventricles in one mesh, plus the pulmonary trunk as a second material), `Auricula der` / `Auricula izq` (right and left atria), `Arteritas` / `Venitas` (coronary vessels), 86,080 triangles with modifiers applied. Materials are Cycles networks (Diffuse + Fresnel + Mix), which the glTF exporter cannot read, so a plain export loses every texture; `scripts/models/blend-to-glb.py` rebuilds them as Principled BSDF and exports 9.7 MB, 0.4 MB after compression. **Reserve for Phase 4** (only model with separate atria); not used for M9 because the left ventricle would have to be cut out of `Ventriculos`.
+
+## Decision (2026-10-07): #9 elZancudo, split, is `heart_v1`
+
+Chosen over #2 Freddan755 for the better model and the separate atria. `scripts/models/split-heart-cycles.py` separated it (pulmonary trunk by material; ventricles cut along the LAD groove with a planar septum; atrium names corrected; `socket_*` empties at the assembled pose), `scripts/models/blend-to-glb.py` exported it, and `gltf-transform optimize ... --prune false` compressed it to `models/heart_v1/heart.glb`: 0.39 MB, 86,388 triangles, 8 meshes (6 components plus coronary arteries and veins as scenery). `pnpm content:scaffold models/heart_v1/heart.glb --prune` refreshed `content/models/heart_v1.json` from it. Freddan755's model remains the fallback. Source files: `content/source/heart_candidates/Human_heart.blend` (original) and `Human_heart_split.blend`.
+
+Attribution: "Heart model: 'Human heart for Cycles' by elZancudo, Blend Swap, CC BY 3.0. Modified: separated into components, ventricles split, compressed."

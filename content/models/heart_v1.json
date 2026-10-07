@@ -4,7 +4,7 @@
   "subject": "anatomy",
   "file": "heart.glb",
   "units": "cm",
-  "defaultCamera": { "azimuth": 20, "elevation": 15, "distance": 40 },
+  "defaultCamera": { "azimuth": 0, "elevation": 0, "distance": 30 },
   "components": [
     {
       "id": "left_ventricle",
@@ -32,6 +32,17 @@
       "tags": ["deoxygenated", "pulmonary_circuit"],
       "relations": [{ "type": "connects_to", "target": "pulmonary_artery" }],
       "restSocketId": "socket_right_ventricle"
+    },
+    {
+      "id": "pulmonary_artery",
+      "name": "Pulmonary Artery",
+      "type": "vessel",
+      "interactable": true,
+      "grabbable": true,
+      "highlightable": true,
+      "description": "Carries deoxygenated blood from the right ventricle to the lungs.",
+      "tags": ["deoxygenated", "artery"],
+      "restSocketId": "socket_pulmonary_artery"
     },
     {
       "id": "left_atrium",
@@ -67,100 +78,49 @@
       "description": "Largest artery; carries oxygenated blood to the body.",
       "tags": ["oxygenated", "artery"],
       "restSocketId": "socket_aorta"
-    },
-    {
-      "id": "pulmonary_artery",
-      "name": "Pulmonary Artery",
-      "type": "vessel",
-      "interactable": true,
-      "grabbable": true,
-      "highlightable": true,
-      "description": "Carries deoxygenated blood from the right ventricle to the lungs.",
-      "tags": ["deoxygenated", "artery"],
-      "restSocketId": "socket_pulmonary_artery"
-    },
-    {
-      "id": "pulmonary_veins",
-      "name": "Pulmonary Veins",
-      "type": "vessel",
-      "interactable": true,
-      "grabbable": false,
-      "highlightable": true,
-      "description": "Return oxygenated blood from the lungs to the left atrium.",
-      "tags": ["oxygenated", "vein"]
-    },
-    {
-      "id": "superior_vena_cava",
-      "name": "Superior Vena Cava",
-      "type": "vessel",
-      "interactable": true,
-      "grabbable": false,
-      "highlightable": true,
-      "description": "Returns deoxygenated blood from the upper body.",
-      "tags": ["deoxygenated", "vein"]
-    },
-    {
-      "id": "inferior_vena_cava",
-      "name": "Inferior Vena Cava",
-      "type": "vessel",
-      "interactable": true,
-      "grabbable": false,
-      "highlightable": true,
-      "description": "Returns deoxygenated blood from the lower body.",
-      "tags": ["deoxygenated", "vein"]
-    },
-    {
-      "id": "septum",
-      "name": "Septum",
-      "type": "wall",
-      "interactable": true,
-      "grabbable": false,
-      "highlightable": true,
-      "description": "Muscular wall separating left and right sides of the heart.",
-      "tags": []
     }
   ],
   "sockets": [
     {
-      "id": "socket_left_ventricle",
-      "transform": { "position": [2.5, -3.0, 0.5], "rotation": [0, 0, 0] },
+      "id": "socket_aorta",
+      "transform": { "position": [1.177, 6.937, -1.038], "rotation": [0, 0, 0] },
       "radius": 1.5,
+      "accepts": ["aorta", "pulmonary_artery"],
+      "visual": "ghost"
+    },
+    {
+      "id": "socket_pulmonary_artery",
+      "transform": { "position": [1.224, 5.441, 0.629], "rotation": [0, 0, 0] },
+      "radius": 1.5,
+      "accepts": ["aorta", "pulmonary_artery"],
+      "visual": "ghost"
+    },
+    {
+      "id": "socket_left_ventricle",
+      "transform": { "position": [2.879, -1.638, -0.325], "rotation": [0, 0, 0] },
+      "radius": 2,
       "accepts": ["left_ventricle", "right_ventricle", "left_atrium", "right_atrium"],
       "visual": "ghost"
     },
     {
       "id": "socket_right_ventricle",
-      "transform": { "position": [-2.0, -3.2, 1.0], "rotation": [0, 0, 0] },
+      "transform": { "position": [-1.004, -1.279, -0.26], "rotation": [0, 0, 0] },
       "radius": 1.5,
       "accepts": ["left_ventricle", "right_ventricle", "left_atrium", "right_atrium"],
       "visual": "ghost"
     },
     {
       "id": "socket_left_atrium",
-      "transform": { "position": [2.0, 2.5, -1.0], "rotation": [0, 0, 0] },
+      "transform": { "position": [1.978, 4.272, -0.868], "rotation": [0, 0, 0] },
       "radius": 1.2,
       "accepts": ["left_ventricle", "right_ventricle", "left_atrium", "right_atrium"],
       "visual": "ghost"
     },
     {
       "id": "socket_right_atrium",
-      "transform": { "position": [-2.5, 2.2, 0.0], "rotation": [0, 0, 0] },
+      "transform": { "position": [-2.149, 5.093, -1.859], "rotation": [0, 0, 0] },
       "radius": 1.2,
       "accepts": ["left_ventricle", "right_ventricle", "left_atrium", "right_atrium"],
-      "visual": "ghost"
-    },
-    {
-      "id": "socket_aorta",
-      "transform": { "position": [0.5, 6.0, 0.0], "rotation": [0, 0, 0.2] },
-      "radius": 1.2,
-      "accepts": ["aorta", "pulmonary_artery"],
-      "visual": "ghost"
-    },
-    {
-      "id": "socket_pulmonary_artery",
-      "transform": { "position": [-1.0, 5.0, 1.5], "rotation": [0, 0, -0.3] },
-      "radius": 1.2,
-      "accepts": ["aorta", "pulmonary_artery"],
       "visual": "ghost"
     }
   ],
@@ -172,14 +132,6 @@
       "label": "Thick muscular wall",
       "kind": "info",
       "body": "The left ventricle wall is about three times thicker than the right because it pumps against systemic pressure."
-    },
-    {
-      "id": "hs_septum",
-      "componentId": "septum",
-      "localPosition": [0, 0, 0.5],
-      "label": "Septum",
-      "kind": "info",
-      "body": "Prevents mixing of oxygenated and deoxygenated blood."
     }
   ],
   "poses": {
@@ -191,6 +143,11 @@
       "right_atrium": { "position": [-8, 6, -2], "rotation": [0, 0, 0] },
       "aorta": { "position": [3, 12, 0], "rotation": [0, 0, 0.2] },
       "pulmonary_artery": { "position": [-4, 11, 2], "rotation": [0, 0, -0.3] }
+    },
+    "start": {
+      "aorta": { "position": [-12, 7, -1.038], "rotation": [0, 0, 0] },
+      "pulmonary_artery": { "position": [-12, 0, 0.629], "rotation": [0, 0, 0] },
+      "left_ventricle": { "position": [12, -2, -0.325], "rotation": [0, 0, 0] }
     }
   }
 }

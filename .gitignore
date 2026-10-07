@@ -16,9 +16,12 @@ coverage
 # Blender sources stay outside the repo (doc 16 open question 1: GLBs committed, .blend ignored, no LFS for MVP)
 content/source/*.blend
 content/source/*.blend1
+# raw downloaded candidate models (tens of MB, licences vary); only the compressed models/<id>/*.glb is committed
+content/source/heart_candidates/
 
 # served copies; the source of truth is models/, which is committed (one heart stays under 5 MB)
 apps/web/public/models/*.glb
+apps/web/public/models/*/
 
 # Runtime assets copied/downloaded by `pnpm assets:sync` (scripts/assets/sync-public.ts); pinned in packages/vision/src/assets.ts
 apps/web/public/mediapipe/*/

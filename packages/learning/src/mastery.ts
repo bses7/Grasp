@@ -32,5 +32,5 @@ export function computeMastery(
   void attempts;
   void objectives;
   void lesson;
-  throw new Error("TODO Phase D: computeMastery (doc 06, M8)");
+  throw new Error("TODO Phase D: computeMastery (doc 06, doc 13 Phase 4)");
 }

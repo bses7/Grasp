@@ -7,21 +7,26 @@
  * and the AI tutor only explains what this package decided.
  */
 
-export { evaluate } from "./evaluate.js";
-export { countsAsAttempt } from "./counts-as-attempt.js";
-export { computeMastery } from "./mastery.js";
-export type { MasteryByObjective } from "./mastery.js";
-export { nextHint, MAX_HINT_LEVEL, FALLBACK_HINT_TEMPLATE } from "./hints.js";
+export { evaluate } from "./evaluate";
+export { countsAsAttempt } from "./counts-as-attempt";
+export { computeMastery } from "./mastery";
+export type { MasteryByObjective } from "./mastery";
+export { nextHint, MAX_HINT_LEVEL, FALLBACK_HINT_TEMPLATE } from "./hints";
 export {
   TIME_PROMPT_MS,
   DEFAULT_MAX_ATTEMPTS,
   ASSESSMENT_MASTERY_WEIGHT,
   GRADED_ACTIVITY_KINDS,
   isActivityComplete,
+  maxAttemptsFor,
+  taskStatus,
   nextTask,
   nextActivity,
-} from "./sequencing.js";
-export { REMEDIATION_SEQUENCE, RETRY_HINTS_USED, shouldRemediate, synthesiseMicroTask } from "./remediation.js";
-export type { RemediationStep } from "./remediation.js";
-export { LogBuffer, FLUSH_INTERVAL_MS, FLUSH_BATCH_SIZE } from "./log-buffer.js";
-export type { LogTransport } from "./log-buffer.js";
+} from "./sequencing";
+export { TaskRunner } from "./task-runner";
+export type { TaskRunnerOptions, Verdict } from "./task-runner";
+export { REMEDIATION_SEQUENCE, RETRY_HINTS_USED, shouldRemediate, synthesiseMicroTask } from "./remediation";
+export type { RemediationStep } from "./remediation";
+export { LogBuffer, FLUSH_INTERVAL_MS, FLUSH_BATCH_SIZE } from "./log-buffer";
+export { SessionLogger, falseStartRate, FALSE_START_MS } from "./logger";
+export type { LogTransport } from "./log-buffer";

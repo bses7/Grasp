@@ -16,8 +16,8 @@ export function applySceneCommand(cmd: SceneCommand): void {
       // tween every component to manifest.poses[name] (M9)
       throw new Error("TODO Phase D: setPose (doc 05, M9)");
     case "highlight":
-      // emissive pulse at 1 Hz for durationMs on the listed ids (M6)
-      throw new Error("TODO Phase D: highlight (doc 05, M6)");
+      // outcome styles are applied by LessonScene (M8); the unstyled hint pulse at 1 Hz arrives with the hint ladder
+      throw new Error("TODO Phase D: highlight hint pulse (doc 05, doc 13 Phase 4)");
     case "cameraTo":
       // camera tween to frame a componentId or hotspotId (M9)
       throw new Error("TODO Phase D: cameraTo (doc 05, M9)");
@@ -28,8 +28,8 @@ export function applySceneCommand(cmd: SceneCommand): void {
       // show only the listed component ids (M9)
       throw new Error("TODO Phase D: setVisible (doc 05, M9)");
     case "reset":
-      // tween to the activity's initial snapshot over RESET_TWEEN_MS (M8)
-      throw new Error("TODO Phase D: reset (doc 05, M8)");
+      // tween to the start pose over RESET_TWEEN_MS: handled inside LessonScene's apply() (M7)
+      throw new Error("reset is applied by LessonScene");
     case "playAnimation":
       // V1: AnimationMixer clip named in manifest.animations
       throw new Error("TODO Phase D: playAnimation (doc 05, V1)");
