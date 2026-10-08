@@ -242,7 +242,7 @@ The MVP is done when every row passes on the reference laptop (integrated GPU, I
 | A11 | GLB size and load | < 5 MB compressed; time to first interaction ≤ 5 s on 10 Mbps | CI check; `performance.mark` | 05 §10, 10 |
 | A12 | Dropped frames | ≤ 30 per minute (delta > 50 ms) | logged | 05 §10 |
 | A13 | Gesture accuracy in calibration | ≥ 0.90 overall; precision and recall ≥ 0.90 for `pinch` and `release` | `calibration_prompt` vs `gesture_emit` | 14 §2.1 |
-| A14 | Pinch false-start rate | ≤ 0.10 of `grab_start` | `grab_start` without `grab_move` within 300 ms | 14 §2.1, 00 |
+| A14 | Pinch false-start rate | ≤ 0.10 of closed grabs | a closed grab that never moved: `grab_move_summary.firstMoveMs` null, decided 2026-10-07 (was: no `grab_move` within 300 ms) | 14 §2.1, 00 |
 | A15 | Tracking stability | ≤ 2 `tracking_lost` per minute; lost fraction ≤ 0.05; jitter ≤ 0.005 | `tracking_*`, `perf_sample.jitterNorm` | 14 §2.1 |
 | A16 | Tracking loss never grades | No `place` emitted during or after `tracking_lost` until `tracking_regained` | Replay test on logged sessions | 00, 04, 05 |
 | A17 | Three placements first try | 3 of 3 correct within 2 minutes by a non-developer with a window behind them | Observed session | 00 |

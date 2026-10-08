@@ -335,7 +335,7 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
           videoAspect: fromCamera ? (p.viewport?.videoAspect ?? canvasAspect) : canvasAspect,
           canvasAspect,
           mirrored: true,
-          reachScale: fromCamera ? (p.viewport?.reachScale ?? 1) : 1,
+          reachScale: fromCamera ? (p.viewport?.reachScale ?? SCENE_CONSTANTS.REACH_SCALE) : 1,
         });
       if (fromCamera) drawCursor(ndc);
       return ndc;

@@ -98,7 +98,7 @@ Success criteria for the prototype:
 | Three placements, first try, by a person other than the developer | 3 of 3 correct within 2 minutes |
 | Frame time p95 with hand in view | under 33 ms on an integrated GPU |
 | Inference p95 | under 33 ms in the worker path |
-| Pinch false starts | under 10 percent of `grab_start` events |
+| Pinch false starts | under 10 percent of closed grabs (a false start never moved; [14 §2.1](14-evaluation-methodology.md#21-computer-vision-metrics)) |
 | Tracking-loss recovery | no `place` emitted during or after a `tracking_lost` |
 
 If the prototype fails the first criterion with a window behind the learner, the gesture modality is at risk and the project should pivot to validating the learning engine with the mouse path before investing further in CV. The milestone sequence is in [17](17-first-prototype-plan.md).

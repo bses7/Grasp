@@ -298,7 +298,7 @@ Every threshold above is provisional. Logging follows the `LogEvent` schema in t
 | Threshold or parameter | Metric that reveals mis-tuning | Log field needed |
 |---|---|---|
 | Pinch enter/exit 0.25/0.40 | Rate of `grab_end` → `grab_start` within 300 ms (flicker); mean pinch hold time | `grab_start.pinchDist`, `grab_end.pinchDist`, `grab_end.holdMs` |
-| Hold frames 2/3/3 | False-start rate: `grab_start` with no `grab_move` within 300 ms; time from pinch to `grab_start` | `grab_start.holdFrames`, `grab_start.confidence` |
+| Hold frames 2/3/3 | False-start rate: closed grabs that never moved (`grab_move_summary.firstMoveMs` null, i.e. cursor never travelled 0.01) ÷ `grab_move_summary` count, gesture condition only, decided 2026-10-07 (was: no `grab_move` within 300 ms, which miscounted deliberate pause-then-carry drags); time from pinch to `grab_start` | `grab_start.holdFrames`, `grab_start.confidence`, `grab_move_summary.firstMoveMs` |
 | Drag threshold 0.01 | `grab_end` with zero `grab_move` on intended moves | `grab_end.moveCount` |
 | One-Euro `beta` | Cursor overshoot: sign reversals per second in `grab_move` cursor velocity | `perf_sample.cursorReversalsPerS` |
 | Presence 0.6 and no-hand 500 ms | Tracking-lost count and duration; `tracking_lost` events per minute | `tracking_lost.durationMs` (on regained), `cv_status.state`, `cv_status.sinceMs` |

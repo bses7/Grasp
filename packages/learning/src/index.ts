@@ -28,5 +28,5 @@ export type { TaskRunnerOptions, Verdict } from "./task-runner";
 export { REMEDIATION_SEQUENCE, RETRY_HINTS_USED, shouldRemediate, synthesiseMicroTask } from "./remediation";
 export type { RemediationStep } from "./remediation";
 export { LogBuffer, FLUSH_INTERVAL_MS, FLUSH_BATCH_SIZE } from "./log-buffer";
-export { SessionLogger, falseStartRate, FALSE_START_MS } from "./logger";
+export { SessionLogger, falseStartRate } from "./logger";
 export type { LogTransport } from "./log-buffer";

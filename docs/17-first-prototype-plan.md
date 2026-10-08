@@ -209,7 +209,7 @@ About 84 hours. At eight evening hours per week that is ten to eleven weeks; at 
 | Objective | Every attempt is reconstructible from events alone, in the shape the study will use |
 | Deliverable | In-memory `LogEvent[]` with `sessionId` (random UUID per page load), `condition` from `?input`, `t`, `type`, `payload`, emitted for `task_start`, `task_attempt`, `task_end`, `grab_start`, `grab_end`, `place`, `drop`, `tracking_lost`, `tracking_regained`, `hand_count`, `perf_sample`, `device_info`; a HUD button downloads the array as JSON; no landmarks or frames in any payload |
 | Modules | `packages/learning/logger` (`logger.ts`, `download.ts`), `packages/types` (`LogEvent` per `research-protocol` section 4 plus the additions in [14](14-evaluation-methodology.md)) |
-| Acceptance | A script replays a downloaded log and recomputes every `task_attempt` outcome from the preceding `place` or `drop`; no payload contains an array longer than 3 numbers; false-start rate (`grab_start` without `grab_move` within 300 ms) is computable |
+| Acceptance | A script replays a downloaded log and recomputes every `task_attempt` outcome from the preceding `place` or `drop`; no payload contains an array longer than 3 numbers; false-start rate (a closed grab that never moved: `grab_move_summary.firstMoveMs` null, decided 2026-10-07; was no `grab_move` within 300 ms) is computable |
 | Effort | 4 h |
 | Risk retired | Instrumentation: the event schema captures what the analysis plan needs, discovered before the research-instrumentation work (project Phase E, not a doc 13 phase) rather than during it |
 
@@ -237,7 +237,7 @@ Measured at M11 from the downloaded logs and the two sessions.
 | Three placements, mouse path | 3 of 3 for both people | any failure | not applicable; a mouse failure is a scene bug, fix it |
 | `frameMsP95` during a drag, integrated GPU | ≤ 33 ms | 33–50 ms | over 50 ms after the degrade ladder |
 | `inferenceMsP95`, worker path | ≤ 33 ms | 33–45 ms | over 45 ms, or worker path unavailable in Chrome and Edge |
-| Pinch false-start rate | < 10 percent of `grab_start` | 10–20 percent | over 20 percent after tuning |
+| Pinch false-start rate (closed grabs that never moved) | < 10 percent of closed grabs | 10–20 percent | over 20 percent after tuning |
 | `place` emitted during or after `tracking_lost` | zero | not applicable | any occurrence is a bug, fix before proceeding |
 | GLB size, time to first interaction | < 5 MB, ≤ 5 s | 5–8 MB or 5–8 s | over 8 MB with simplification already applied |
 

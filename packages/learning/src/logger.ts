@@ -5,9 +5,6 @@
  */
 import type { LogEvent, LogEventType, LogPayload, StudyCondition } from "@grasp/types";
 
-/** grab_start without a grab_move within this many ms counts as a false start (doc 15 challenge 10). */
-export const FALSE_START_MS = 300;
-
 type Cursor = { x: number; y: number };
 
 type OpenGrab = {
@@ -90,16 +87,22 @@ export class SessionLogger {
 }
 
 /**
- * False-start rate (doc 14 section 2.1): closed grabs whose drag had no move within FALSE_START_MS.
- * Both counts come from grab_move_summary, so a grab still open when the log ends counts in neither.
+ * False-start rate (doc 14 section 2.1): closed grabs that never moved (`firstMoveMs` null).
+ * Decided 2026-10-07 (M11): the earlier "no move within 300 ms" rule counted deliberate drags that start
+ * after a natural pause (the developer's log: 4 of 9 grabs, all real drags first moving at 304-400 ms).
+ * Both counts come from grab_move_summary, so a grab still open when the log ends counts in neither, and
+ * a grab ended by tracking loss (grab_end reason "lost") is excluded from both.
  * Gesture condition only; a deliberate pinch-to-select (identify tasks, Phase 4) also never moves.
  */
 export function falseStartRate(events: readonly LogEvent[]): { grabs: number; falseStarts: number; rate: number | null } {
-  const summaries = events.filter((e) => e.type === "grab_move_summary");
+  // A grab ended by tracking loss is failure state 5, not a misread pinch: drop it from both counts.
+  // grabEnd() logs grab_end immediately before its summary, so the preceding grab_end carries the reason.
+  const summaries = events.filter(
+    (e, i) => e.type === "grab_move_summary" && !(events[i - 1]?.type === "grab_end" && events[i - 1]!.payload.reason === "lost"),
+  );
   const grabs = summaries.length;
   const falseStarts = summaries.filter((e) => {
-    const first = e.payload.firstMoveMs;
-    return first === null || (typeof first === "number" && first > FALSE_START_MS);
+    return e.payload.firstMoveMs === null;
   }).length;
   return { grabs, falseStarts, rate: grabs ? falseStarts / grabs : null };
 }

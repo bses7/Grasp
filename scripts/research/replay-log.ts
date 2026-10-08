@@ -6,7 +6,7 @@
  * 1. Every payload value is a scalar, and no key names a landmark, frame, image or position.
  * 2. A fresh TaskRunner fed only the logged select / place / drop events (restarting at each scene_reset)
  *    reproduces every logged task_attempt, in order: taskId, attemptNo, correct, partial, score.
- * 3. The false-start rate (grab_start with no grab_move within 300 ms) is computable.
+ * 3. The false-start rate (closed grabs that never moved: grab_move_summary.firstMoveMs null) is computable.
  * Exits 1 if check 1 or 2 fails.
  */
 import { readFileSync } from "node:fs";
@@ -24,7 +24,8 @@ const lesson = loadLesson(lessonId);
 let problems = 0;
 
 // 1. Payload shape.
-const BANNED = /landmark|frame|image|pixel|video|position|^x$|^y$|^z$/i;
+// Whole key names only (perf_sample's frameMsP95 is a timing, not a frame); anything mentioning landmarks.
+const BANNED = /landmark|^(frames?|images?|pixels?|video|position|x|y|z)$/i;
 for (const e of events) {
   for (const [k, v] of Object.entries(e.payload)) {
     if (v !== null && typeof v === "object") (problems++, console.error(`seq ${e.seq} ${e.type}.${k}: not a scalar`));

@@ -47,7 +47,7 @@ describe("SessionLogger", () => {
 });
 
 describe("falseStartRate", () => {
-  it("counts drags with no move, or a first move after 300 ms", () => {
+  it("counts only drags that never moved; a late first move is still a deliberate drag", () => {
     const log = new SessionLogger("s", "gesture", 0);
     log.grabStart("aorta", { x: 0, y: 0 }, 0);
     log.grabMove({ x: 0.1, y: 0 }, 0, 100); // moved at 100 ms: a real drag
@@ -55,9 +55,19 @@ describe("falseStartRate", () => {
     log.grabStart(null, { x: 0, y: 0 }, 1000);
     log.grabEnd("release", 1100); // never moved: false start
     log.grabStart("aorta", { x: 0, y: 0 }, 2000);
-    log.grabMove({ x: 0.1, y: 0 }, 0, 2400); // first move at 400 ms: false start
+    log.grabMove({ x: 0.1, y: 0 }, 0, 2400); // first move at 400 ms after a pause: a real drag
     log.grabEnd("release", 2600);
-    expect(falseStartRate(log.events)).toEqual({ grabs: 3, falseStarts: 2, rate: 2 / 3 });
+    expect(falseStartRate(log.events)).toEqual({ grabs: 3, falseStarts: 1, rate: 1 / 3 });
+  });
+
+  it("leaves a grab ended by tracking loss out of both counts (failure state 5, not a misread pinch)", () => {
+    const log = new SessionLogger("s", "gesture", 0);
+    log.grabStart("aorta", { x: 0, y: 0 }, 0);
+    log.trackingLost(600);
+    log.grabEnd("lost", 1600); // camera covered before the hand moved
+    log.grabStart("aorta", { x: 0, y: 0 }, 2000);
+    log.grabEnd("release", 2100); // a real false start
+    expect(falseStartRate(log.events)).toEqual({ grabs: 1, falseStarts: 1, rate: 1 });
   });
 
   it("leaves a grab still open at the end of the log out of both counts", () => {

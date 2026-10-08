@@ -19,6 +19,7 @@
     "models:optimize": "bash scripts/models/optimize.sh",
     "models:upload": "tsx scripts/models/upload.ts",
     "research:replay": "tsx scripts/research/replay-log.ts",
+    "research:stopgo": "tsx scripts/research/stopgo.ts",
     "research:metrics": "tsx scripts/research/metrics.ts",
     "research:export": "tsx scripts/research/export-session.ts",
     "db:migrate": "tsx scripts/db/migrate.ts",

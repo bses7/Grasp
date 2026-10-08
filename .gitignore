@@ -32,3 +32,9 @@ apps/web/public/draco/*
 .claude
 CLAUDE.md
 
+
+# Downloaded session logs are research data: never committed (doc 14 data handling). Also stray model exports.
+grasp-log-*.json
+/out.glb
+stopgo-*.md
+p[0-9]*-*.json
