@@ -58,7 +58,7 @@ export type LogEvent = {
  * hand_count        { n }
  * tutor_message     { interactionId, taskId, kind, hintLevel, status, latencyMs, source }   // never the text; enums owned by doc 07
  * perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate, path }   // see PerfSample
- * device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // gpuTier null in the prototype; camera fields null and workerPath false for mouse
+ * device_info (once){ gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // gpuTier null in the prototype; camera fields null and workerPath false for mouse; no user agent (doc 14 decision 2026-10-29, data minimisation)
  */
 
 /**

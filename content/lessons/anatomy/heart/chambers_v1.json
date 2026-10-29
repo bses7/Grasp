@@ -6,9 +6,24 @@
   "estimatedMinutes": 12,
   "difficulty": 1,
   "objectives": [
-    { "id": "obj_identify_chambers", "statement": "Identify the four chambers of the heart", "bloom": "remember", "masteryThreshold": 0.8 },
-    { "id": "obj_place_vessels", "statement": "Attach the great vessels to the correct chambers", "bloom": "apply", "masteryThreshold": 0.8 },
-    { "id": "obj_blood_path", "statement": "Order the path of blood through the heart", "bloom": "analyze", "masteryThreshold": 0.7 }
+    {
+      "id": "obj_identify_chambers",
+      "statement": "Identify the four chambers of the heart",
+      "bloom": "remember",
+      "masteryThreshold": 0.8
+    },
+    {
+      "id": "obj_place_vessels",
+      "statement": "Attach the great vessels to the correct chambers",
+      "bloom": "apply",
+      "masteryThreshold": 0.8
+    },
+    {
+      "id": "obj_blood_path",
+      "statement": "Order the path of blood through the heart",
+      "bloom": "analyze",
+      "masteryThreshold": 0.7
+    }
   ],
   "activities": [
     {
@@ -20,23 +35,41 @@
         "Blood enters through the atria and leaves through the ventricles.",
         "Rotate the heart with a pinch on empty space."
       ],
-      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false },
+      "scene": {
+        "pose": "assembled",
+        "allowOrbit": true,
+        "allowGrab": false,
+        "socketVisual": "none",
+        "socketsVisible": false
+      },
       "tasks": [],
-      "completion": { "time": 20 }
+      "completion": { "continue": true }
     },
     {
       "id": "act_explore",
       "kind": "explore",
       "title": "Look around",
-      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false, "socketsVisible": false },
+      "scene": {
+        "pose": "assembled",
+        "allowOrbit": true,
+        "allowGrab": false,
+        "socketsVisible": false,
+        "socketVisual": "none"
+      },
       "tasks": [],
-      "completion": { "time": 60 }
+      "completion": { "continue": true }
     },
     {
       "id": "act_guided",
       "kind": "guided",
       "title": "Find and attach",
-      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": true, "socketsVisible": true },
+      "scene": {
+        "pose": "aorta_detached",
+        "allowOrbit": true,
+        "allowGrab": true,
+        "socketsVisible": true,
+        "socketVisual": "ghost"
+      },
       "tasks": [
         {
           "id": "t_g1",
@@ -48,7 +81,11 @@
           "scoring": { "correct": 10, "hintPenalty": 2 },
           "hints": [
             { "level": 1, "text": "It is one of the two lower chambers." },
-            { "level": 2, "highlight": ["left_ventricle", "right_ventricle"], "text": "It is on the learner's right when facing the heart." },
+            {
+              "level": 2,
+              "highlight": ["left_ventricle", "right_ventricle"],
+              "text": "It is on the learner's right when facing the heart."
+            },
             { "level": 3, "highlight": ["left_ventricle"], "cameraTo": "hs_lv_wall" }
           ]
         },
@@ -62,7 +99,12 @@
           "scoring": { "correct": 10, "hintPenalty": 2 },
           "hints": [
             { "level": 1, "text": "Atria are the upper chambers." },
-            { "level": 2, "tutor": true, "highlight": ["right_atrium", "left_atrium"], "text": "It is the upper chamber on the learner's left when facing the heart." },
+            {
+              "level": 2,
+              "tutor": true,
+              "highlight": ["right_atrium", "left_atrium"],
+              "text": "It is the upper chamber on the learner's left when facing the heart."
+            },
             { "level": 3, "highlight": ["right_atrium"] }
           ]
         },
@@ -76,8 +118,17 @@
           "scoring": { "correct": 15, "partial": 5, "hintPenalty": 3 },
           "hints": [
             { "level": 1, "text": "The aorta leaves from the left ventricle at the top." },
-            { "level": 2, "highlight": ["left_ventricle"], "text": "Its socket is right above the highlighted left ventricle." },
-            { "level": 3, "tutor": true, "highlight": ["aorta"], "text": "This is the aorta. Pinch it and drop it into the socket at the top of the heart, above the left ventricle." }
+            {
+              "level": 2,
+              "highlight": ["left_ventricle"],
+              "text": "Its socket is right above the highlighted left ventricle."
+            },
+            {
+              "level": 3,
+              "tutor": true,
+              "highlight": ["aorta"],
+              "text": "This is the aorta. Pinch it and drop it into the socket at the top of the heart, above the left ventricle."
+            }
           ]
         }
       ],
@@ -87,7 +138,13 @@
       "id": "act_challenge",
       "kind": "challenge",
       "title": "Rebuild the heart",
-      "scene": { "pose": "exploded", "allowOrbit": true, "allowGrab": true, "socketsVisible": true },
+      "scene": {
+        "pose": "exploded",
+        "allowOrbit": true,
+        "allowGrab": true,
+        "socketsVisible": true,
+        "socketVisual": "ring"
+      },
       "tasks": [
         {
           "id": "t_c1",
@@ -149,7 +206,13 @@
       "id": "act_assess",
       "kind": "assessment",
       "title": "Check your understanding",
-      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": true, "socketsVisible": false },
+      "scene": {
+        "pose": "pa_detached",
+        "allowOrbit": true,
+        "allowGrab": true,
+        "socketsVisible": false,
+        "socketVisual": "none"
+      },
       "tasks": [
         {
           "id": "t_a1",
@@ -186,7 +249,11 @@
           "type": "compare",
           "objectiveId": "obj_identify_chambers",
           "prompt": "Which ventricle has the thicker wall?",
-          "expect": { "componentIds": ["left_ventricle", "right_ventricle"], "attribute": "wall_thickness", "answer": "left_ventricle" },
+          "expect": {
+            "componentIds": ["left_ventricle", "right_ventricle"],
+            "attribute": "wall_thickness",
+            "answer": "left_ventricle"
+          },
           "maxAttempts": 1,
           "scoring": { "correct": 10 },
           "hints": []
@@ -198,7 +265,13 @@
       "id": "act_mastery",
       "kind": "mastery",
       "title": "Your results",
-      "scene": { "pose": "assembled", "allowOrbit": true, "allowGrab": false },
+      "scene": {
+        "pose": "assembled",
+        "allowOrbit": true,
+        "allowGrab": false,
+        "socketVisual": "none",
+        "socketsVisible": false
+      },
       "tasks": [],
       "completion": { "allTasks": true }
     }

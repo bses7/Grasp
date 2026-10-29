@@ -14,13 +14,13 @@ export type FeedbackCardProps = {
   feedback: { outcome: Outcome; text: string } | null;
 };
 
-const ROLE: Record<Outcome, { color: string; label: string }> = {
-  correct: { color: "var(--success)", label: "Correct" },
+export const ROLE: Record<Outcome, { color: string; label: string }> = {
+  correct: { color: "var(--success-ink)", label: "Correct" },
   partial: { color: "var(--partial)", label: "Partly right" },
   incorrect: { color: "var(--error)", label: "Not quite" },
 };
 
-function OutcomeIcon({ outcome }: { outcome: Outcome }) {
+export function OutcomeIcon({ outcome }: { outcome: Outcome }) {
   const c = ROLE[outcome].color;
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke={c} strokeWidth="2.5">

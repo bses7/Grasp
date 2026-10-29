@@ -43,9 +43,10 @@ export async function createHandLandmarker(): Promise<{
 }
 
 /** Debug overlay: 21 landmarks and bones per hand, in unmirrored image space (mirror the canvas with CSS). */
-export function drawHands(ctx: CanvasRenderingContext2D, hands: readonly NormalizedLandmark[][]): void {
+export function drawHands(ctx: CanvasRenderingContext2D, hands: readonly (readonly { x: number; y: number; z: number }[])[]): void {
   const draw = new DrawingUtils(ctx);
-  for (const hand of hands) {
+  for (const h of hands) {
+    const hand = h as NormalizedLandmark[]; // DrawingUtils reads only x and y
     draw.drawConnectors(hand, HandLandmarker.HAND_CONNECTIONS, { color: "#4fd1c5", lineWidth: 3 });
     draw.drawLandmarks(hand, { color: "#f6e05e", radius: 3 });
   }

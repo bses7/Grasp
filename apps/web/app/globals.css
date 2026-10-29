@@ -1,55 +1,206 @@
 @import "tailwindcss";
 
 /*
- * Colour tokens from docs/11-ui-ux.md ("Colour roles"). Semantic roles, not
- * palette names. Dark is the 3D environment (default); light is for dashboard
- * and text screens, selected with [data-theme="light"] on <html>.
- * The same values are exported for the R3F scene in @grasp/ui tokens.ts.
+ * "Heart studio" tokens from docs/11-ui-ux.md ("Colour roles", "Shape and elevation tokens"): one light theme on
+ * every screen, palette sampled from heart_v1 (sage backdrop, maroon accent, gold scene shapes, plum ink).
+ * Semantic roles, not palette names; the contrast rules beside each role are doc 11's "Verified contrast".
+ * The scene's emissive tints live in @grasp/ui tokens.ts (CSS variables are not readable in Three.js).
  */
 :root {
-  --bg: #0b1020;
-  --surface: rgb(20 26 46 / 0.92);
-  --text: #e8ecf8;
-  --text-muted: #9aa3bf;
-  --accent: #4fd1ff;
-  --success: #2ed47a;
-  --partial: #ffb547;
-  --error: #ff5c7a;
-  --warn-tracking: #ffb547;
-  --ghost: rgb(79 209 255 / 0.25);
+  --bg: #eef2ea; /* radial centre */
+  --bg-edge: #c9d5c3;
+  --surface: #fbf8f1;
+  --surface-edge: #e4dccb;
+  --track: #d3cab5; /* decorative edges only */
+  --text: #3a1f2b;
+  --text-muted: #6e5a62; /* text only on surface */
+  --accent: #8e3b3a;
+  --accent-ink: #fff8ef;
+  --accent-ledge: #5e2224;
+  --success: #4f8a5a; /* graphics only */
+  --success-ink: #3d6e47; /* correct as text, or fill under white */
+  --partial: #b8862f; /* graphics only */
+  --warn-tracking: #b8862f;
+  --error: #b5523f;
+  --gold: #c9a14a; /* scene shapes only */
+  --amber-ink: #7d5f22; /* any gold or amber text, on surface */
+  --ghost: rgb(201 161 74 / 0.15);
+  --shadow-card: 0 0 0 1.5px var(--surface-edge), 0 10px 28px rgb(58 31 43 / 0.16);
 }
 
-[data-theme="light"] {
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --text: #141a2e;
-  --text-muted: #5b637a;
-  --accent: #0e7cff;
-  --success: #118a4a;
-  --partial: #b36b00;
-  --error: #c62846;
-  --warn-tracking: #ffb547;
-  --ghost: transparent;
+/* High-contrast variant (doc 11): white and black, maroon darkened, borders instead of shadows, no backdrop props. */
+@media (prefers-contrast: more) {
+  :root {
+    --bg: #ffffff;
+    --bg-edge: #ffffff;
+    --surface: #ffffff;
+    --surface-edge: #000000;
+    --track: #000000;
+    --text: #000000;
+    --text-muted: #000000;
+    --accent: #5e2224;
+    --accent-ink: #ffffff;
+    --shadow-card: 0 0 0 2px #000000;
+  }
+  .plinth,
+  .cell {
+    display: none;
+  }
 }
 
-/* Expose the roles to Tailwind utilities: bg-bg, text-accent, border-error ... */
+/* Expose the roles to Tailwind utilities: bg-surface, text-accent, border-track ... */
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-surface-edge: var(--surface-edge);
+  --color-track: var(--track);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
   --color-partial: var(--partial);
   --color-error: var(--error);
   --color-warn-tracking: var(--warn-tracking);
+  --color-gold: var(--gold);
+  --color-amber-ink: var(--amber-ink);
   --color-ghost: var(--ghost);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
 }
 
 html,
 body {
-  background: var(--bg);
+  min-height: 100%;
+  background: radial-gradient(ellipse at 50% 40%, var(--bg), var(--bg-edge) 70%) fixed;
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- shared pieces (doc 11 shape tokens) ---------- */
+.card {
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Primary button: maroon with a 5 px ledge as the "pressable" cue; Fraunces, never below 16 px. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0.75rem 1.4rem;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 22px;
+  box-shadow: 0 5px 0 var(--accent-ledge), 0 10px 18px rgb(94 34 36 / 0.25);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+  cursor: pointer;
+}
+.btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--accent-ledge);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-ghost {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--track), 0 4px 0 var(--track);
+}
+.btn-ghost:active {
+  box-shadow: inset 0 0 0 2px var(--track), 0 1px 0 var(--track);
+}
+@media (prefers-contrast: more) {
+  .btn,
+  .btn-ghost {
+    box-shadow: 0 0 0 2px #000000;
+  }
+}
+
+/* ---------- lesson backdrop: CSS behind the transparent canvas (doc 11 "Backdrop") ---------- */
+.plinth {
+  position: absolute;
+  left: 50%;
+  top: 85%; /* just under the heart at the default camera (VIEW_LIFT in lesson-scene) */
+  width: 440px;
+  height: 90px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 35%, #fbf8f1, #e2dccd 70%);
+  box-shadow: 0 18px 40px rgb(58 31 43 / 0.18), inset 0 -6px 0 #d3cab5;
+}
+.plinth::after {
+  content: "";
+  position: absolute;
+  inset: 22% 18%;
+  border-radius: 50%;
+  background: radial-gradient(rgb(58 31 43 / 0.28), transparent 70%);
+}
+/* Blood cells: soft gradient edge instead of filter: blur (which forces repaint); transform-only drift. */
+.cell {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, #a8504a 0 28%, #8e3b3a 52%, #6e2a2b 70%, rgb(110 42 43 / 0) 74%);
+  opacity: 0.85;
+  animation: drift 7s ease-in-out infinite;
+}
+@keyframes drift {
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+/* ---------- feedback burst (motion-pop) ---------- */
+.burst {
+  animation: pop 500ms cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.spark {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: spark 900ms ease-out both;
+}
+@keyframes spark {
+  to {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+/* motion-pulse: 1 Hz, 0.6 to 1.0 opacity, three cycles then stops. */
+.pulse3 {
+  animation: pulse3 1s linear 3;
+}
+@keyframes pulse3 {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell,
+  .burst,
+  .pulse3 {
+    animation: none;
+  }
+  .spark {
+    display: none;
+  }
 }

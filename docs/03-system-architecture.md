@@ -19,12 +19,12 @@ flowchart TD
   end
 
   subgraph Server["Server (Vercel, Next.js route handlers)"]
-    RS["POST /api/session<br/>validate session code, record condition"]
+    RS["POST /api/session<br/>consent + session code, or resume"]
     RT["POST /api/tutor<br/>validate, cap, log"]
     TUT["TutorService (template)<br/>packages/tutor, in-process"]
     RA["POST /api/attempts<br/>PUT /api/progress (V1)"]
     RE["POST /api/events<br/>research log ingest"]
-    RD["DELETE /api/session/:id<br/>participant deletion"]
+    RD["/api/session/:id<br/>PATCH progress, DELETE, GET export, POST restart"]
   end
 
   PG[("Postgres<br/>Neon or Supabase")]
@@ -63,7 +63,7 @@ flowchart TD
   class LOCAL,CDN v1
 ```
 
-The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitmap`s, and landmarks exist only above it. The only objects that cross it are listed in [What crosses the trust boundary](#what-crosses-the-trust-boundary).
+The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitmap`s, and landmarks exist only above it. Landmarks go to the gesture FSM and, through the `showHands` option (opt-in at the vision API, always on in the lesson's camera preview), to the camera preview overlay, which draws and drops them each frame ([04 Landmark preview overlay](04-computer-vision.md#landmark-preview-overlay)). The only objects that cross it are listed in [What crosses the trust boundary](#what-crosses-the-trust-boundary).
 
 ## What runs where and why
 
@@ -73,7 +73,7 @@ The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitm
 | 3D rendering, raycasting, drag plane, snapping | Browser (main thread) | Only the browser has the GPU and the cursor. | **MVP** |
 | Learning evaluation (`evaluate(task, event)`) | Browser, from lesson JSON | Locked position 5: deterministic and declarative. Running it client-side gives instant feedback and works offline. The same `learning` package is isomorphic so the server can recompute mastery from stored attempts in **V1** for integrity. | **MVP** |
 | Mastery computation | Browser (MVP), server recompute (**V1**) | Trivial arithmetic over attempts; a study participant is not an adversary. XP is **V1** per [Gamification](08-gamification.md) and is not computed in MVP. | **MVP** |
-| Session recording and condition capture | Server | Randomisation is done offline by the researcher (blocked list, per `research-protocol`). The researcher enters a pre-assigned session code that encodes the condition; the server validates the code, records `condition` once, and rejects reuse. Nothing random happens on the server. | **MVP** |
+| Session recording and condition capture | Server | Randomisation is done offline by the researcher (blocked list, per `research-protocol`). The researcher enters a pre-assigned session code that encodes the study phase and condition ([format](#session-create-and-resume)); the server validates the code, records `condition` once, and rejects reuse. Nothing random happens on the server. | **MVP** |
 | Tutor hints and mistake explanations | `POST /api/tutor` route handler: validates the `TutorRequest`, enforces the per-session call caps, calls `TemplateTutorService` from `packages/tutor` in-process (templates over the lesson hint ladder and manifest `description`, `relations`, `tags`), writes the `ai_interactions` row, returns the `TutorResponse`. The tutor client emits the `tutor_message` LogEvent on receipt | Locked position 7: deterministic templates, no paid LLM API, no network egress. The engine is pure TypeScript and could run in the browser; it sits behind the route so validation, caps, and `ai_interactions` logging exist in one place. `TUTOR_ENGINE=local` (**V1**, measured) applies only to an app instance running on the lab laptop alongside the model; the hosted deployment always uses `template`. | **MVP** |
 | Attempt, progress, and event persistence | Server to Postgres | Research data must survive the tab closing and be exportable per session. | **MVP** |
 | Content (lesson JSON, model manifests) | Repo, imported at build time | One author, few lessons, versioned with the code. See [content versioning](10-3d-content-system.md#content-versioning). | **MVP** |
@@ -97,8 +97,8 @@ The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitm
 | 7 | Scene → engine | `{ type: "place", componentId: "aorta", socketId: "socket_aorta" }` | `evaluate(task t_g3, event)` → `{ correct: true, score: 15, feedback }` | No |
 | 8 | Engine → HUD, stores | `EvaluationResult` | feedback card; lesson store advances to next task; mastery recomputed for `obj_place_vessels` | No |
 | 9 | Engine → logger | `task_attempt` LogEvent `{ taskId, correct, partial, score, attemptNo, hintsUsed }` | queued | No |
-| 10 | Logger → server | batch of LogEvents every 10 s or 50 events, `sendBeacon` on unload | `POST /api/events` → `event_logs` rows | Yes, events only |
-| 11 | Engine → server | attempt row | `POST /api/attempts` → `lesson_attempts` row; `PUT /api/progress` → `progress` upsert (**V1**; MVP recomputes mastery from `lesson_attempts`) | Yes |
+| 10 | Logger → server | `LogBuffer` (`@grasp/learning`) flushes every 10 s or at 50 queued, in batches of at most 50; on `pagehide` `navigator.sendBeacon` sends the rest as `text/plain`; every `fetch` uses `keepalive: true`, because a batch already in flight at `pagehide` has left the queue, so the beacon cannot resend it, and without `keepalive` a reload cancelled it (the metrics script found the resulting `seq` gaps); events are queued only while the session has logging consent; a failed POST keeps the events queued, except a 403 (session withdrawn, without logging consent, or not this cookie's), which drops the batch instead of retrying forever | `POST /api/events` → `event_logs` rows, `on conflict do nothing` on `(session_id, seq)` | Yes, events only |
+| 11 | Engine → server | attempt row with a client-generated `id`, batches of at most 50 | `POST /api/attempts` → `lesson_attempts` row, `on conflict do nothing` so a retry writes once; on page close the lesson page beacons any attempt not yet saved, so a reload resumes with it; `PUT /api/progress` → `progress` upsert (**V1**; MVP recomputes mastery from `lesson_attempts`) | Yes |
 
 In the mouse condition, steps 1 to 3 are replaced by the mouse adapter emitting identical `InteractionEvent`s from pointer events. Steps 4 to 11 are byte-for-byte the same, which is what makes the research comparison valid.
 
@@ -139,7 +139,7 @@ The tutor never receives video, landmarks, or a verdict to make. It receives the
 
 | Object | Direction | Contents | Never contains |
 |---|---|---|---|
-| `SessionRequest` / `SessionResponse` | both | client-generated `sessionId` (v4 UUID), consent version accepted, researcher-entered `assignment_code`; returns the validated `sessionId`, `condition` decoded from the `assignment_code`, `participantCode` | name, email, pre-test scores (MVP has no accounts; randomisation is offline) |
+| `SessionRequest` / `SessionResponse` | both | Create (consent form): `{ sessionId, lessonId, assignmentCode, consent: { version, logging } }`. Resume (lesson page): `{ sessionId, lessonId, condition }`. Response `{ sessionId, resumed, condition, studyPhase, consentLogging, participantCode, lessonHash, contentChanged, elapsedMs, nextSeq, attempts, skipped }`, see [Session create and resume](#session-create-and-resume) | name, email, pre-test scores (MVP has no accounts; randomisation is offline) |
 | `TutorRequest` / `TutorResponse` | both | lesson id, task id, hint level, `SceneState`, attempt summary; returns text and optional highlight ids | video, landmarks, free-text identity |
 | `AttemptRow`, `ProgressRow` | up | task id, outcome, score, timing, hints used; per-objective mastery | landmarks |
 | `LogEvent[]` | up | research-protocol event schema | video, images, raw landmark streams |
@@ -157,7 +157,7 @@ The tutor never receives video, landmarks, or a verdict to make. It receives the
 | State management | Zustand with transient subscriptions for per-frame data; React state for UI | See [State management](#state-management) | **MVP** |
 | UI system | Tailwind CSS + Radix primitives (unstyled, accessible) | HUD, dialogs, consent flow; no design-system lock-in. Visual direction in [UI/UX Architecture](11-ui-ux.md) | **MVP** |
 | Learning engine | `packages/learning` (pure TypeScript, no DOM) | `evaluate`, mastery, activity sequencing from lesson JSON | **MVP** |
-| Event logger | `packages/learning/logger` | Buffers `LogEvent`, batches to `/api/events`, respects consent flag | **MVP** |
+| Event logger | `packages/learning/logger` | `LogBuffer` buffers `LogEvent` and drops every event while its injected consent callback is false; `apps/web/lib/logger-transport.ts` batches to `/api/events`. The lesson page passes `() => boot.consentLogging`, the flag `POST /api/session` returns from `consent_records` | **MVP** |
 | Schema validation | Zod | Validates lesson JSON at build time and API payloads at runtime; one schema library on both sides | **MVP** |
 
 ## Backend modules
@@ -172,7 +172,7 @@ The tutor never receives video, landmarks, or a verdict to make. It receives the
 | Content Service | Static JSON imported at build; GLB in `apps/web/public/` (CDN in **V1**). No route handler | **MVP** | Becomes `GET /api/content/*` over tables in **V1** when an authoring UI exists |
 | Research log ingest | `POST /api/events` batch insert; `DELETE /api/session/:id` | **MVP** | Required by `research-protocol` data rules |
 
-Database access uses Drizzle ORM over the Neon serverless driver (or `postgres.js` for Supabase). The ORM choice carries its own checklist in [Recommended Technology Stack](19-tech-stack-and-final-diagram.md).
+Database access uses Drizzle ORM over `postgres.js` (one connection per function instance, 3 s connect timeout) for both local Docker Postgres and Neon; the client lives in `apps/web/lib/db.ts` over `createDb` from `@grasp/db`. The driver choice is argued in [Database Architecture](09-database.md#orm-and-migrations-drizzle-prisma-or-raw-sql). The ORM choice carries its own checklist in [Recommended Technology Stack](19-tech-stack-and-final-diagram.md).
 
 ## Backend runtime: Next.js route handlers versus FastAPI
 
@@ -261,7 +261,7 @@ Three stores, each small:
 
 | Store | Holds | Update frequency | Read by |
 |---|---|---|---|
-| `sessionStore` | `sessionId`, `condition`, consent flags, camera permission state | Rarely | HUD, logger, API clients |
+| `sessionStore` | `sessionId`, `condition`, consent flags, camera permission state | Rarely | Nobody yet: `apps/web/stores/session-store.ts` exists but is unused. The lesson page holds these facts in the `boot` object returned by `POST /api/session`, and the logger reads consent from there, so the server row stays the single source of the consent flag |
 | `lessonStore` | current activity and task, attempts per task, hints used, per-objective mastery (XP is **V1**) | On discrete events | HUD, engine, progress client |
 | `sceneStore` | `SceneState` (hovered, grabbed, component socket occupancy, camera), tracking status | Per event; cursor position via a ref, not the store | Scene, HUD indicators, tutor client |
 
@@ -295,17 +295,42 @@ Session lifecycle for the study:
 
 | Event | Server action |
 |---|---|
-| Consent accepted, researcher enters session code | `POST /api/session` validates the client-generated `sessionId` and the pre-assigned session code (from the researcher's offline blocked-randomisation list), inserts the `research_sessions` row with the `condition` the code encodes, marks the code used; sets cookie |
+| Consent accepted, researcher enters session code | `/consent` posts the create body to `POST /api/session`, which validates the client-generated `sessionId` and the pre-assigned session code (from the researcher's offline blocked-randomisation list) and inserts the `research_sessions` row (with `study_phase` and `condition` from the code, `consent_version`) and its `consent_records` row in one transaction; the unique `assignment_code` makes a study code single-use (409 on reuse); sets cookie. Declining shows a plain exit screen and stores nothing |
 | Lesson in progress | All writes carry `sessionId` from the cookie; route handlers reject payloads whose body `sessionId` differs from the cookie |
-| Retention test (+7 days) | Participant enters their printed code; `GET /api/session/:code` resolves `sessionId` for the retention form only |
-| Withdrawal | `DELETE /api/session/:id` cascades to `lesson_attempts`, `progress`, `event_logs`, `ai_interactions` |
+| Retention test (+7 days) | Participant enters their printed code; `GET /api/session/:code` resolves `sessionId` for the retention form only (not built yet; answers 501) |
+| Results screen | Shows the `participant_code`; a dev session (only) also offers "Try again", which calls `POST /api/session/:id/restart` (cookie-gated, 403 for pilot and main sessions): a fresh session for the same lesson and condition, the consent record copied, the cookie moved; the old session stays |
+| Export | `GET /api/session/:id/export`, where `id` must equal the cookie's (403 otherwise), returns the six MVP tables as one JSON attachment. The researcher exports by session id or participant code with `pnpm research:export <id\|code> [out.json]`. Both call `exportSession` in `packages/db/src/privacy.ts` |
+| Withdrawal | `DELETE /api/session/:id`, where `id` must equal the cookie's (403 otherwise), calls `withdrawSession` (`packages/db/src/privacy.ts`): in one transaction it stamps `consent_records.withdrawn_at` and deletes the `research_sessions` row, which cascades to `event_logs`, `instrument_responses`, `lesson_attempts`, `ai_interactions` (and `progress` once it exists in **V1**); the consent row is kept; the cookie is cleared. A participant who has left the device quotes the participant code, or the researcher looks up the session code they assigned (e.g. `PG-014`, for someone who stopped before the results screen), and runs `pnpm research:delete <id\|participant code\|session code>`, which calls the same function. No page has a withdraw button yet |
+
+### Session create and resume
+
+As built in roadmap steps 4.5 (persistence and resume) and 4.6 (consent), **MVP**. The 4.5 interim (dev rows with `consent_version = 'none'` and ungated logging) is gone: every session now starts at `/consent`.
+
+| Concern | Behaviour |
+|---|---|
+| Cookie | `grasp_session`: httpOnly, `SameSite=Strict`, `Max-Age` 30 days, `Secure` in production |
+| Consent text | `apps/web/lib/consent.ts`: `CONSENT_VERSION = "pilot-v1"`, title and paragraphs in the repo, so the wording a participant saw is reproducible from the version; a wording change means a new version. The event-log opt-in is a separate checkbox, unticked by default. `consent_tutor_payloads` is written `false` until the tutor ships (roadmap Phase 5); asking for it then means a new consent version |
+| Session code format | `<phase><condition>-<number>`: phase `P` pilot, `S` main study, `D` dev; condition `G` gesture, `M` mouse; e.g. `PG-014` (number zero-padded to 3). Parsed by `parseAssignmentCode` in `apps/web/lib/consent.ts`, shared by the form and the route. Dev codes `DG` and `DM` need no number; the route stores them as `<code>-<first 8 of id>` (e.g. `DM-1a2b3c4d`) so the developer can reuse them. The parser also accepts 1–4 digits and an optional hyphen (`pg14` → `PG-014`). The app never randomises |
+| Create request | From the consent form: `{ sessionId, lessonId, assignmentCode, consent: { version, logging } }`; `consent.version` must equal `CONSENT_VERSION`. A malformed code answers 400, a used one 409. A body id already taken gets a fresh server UUID. The form then stores `sessionId` in `localStorage` keyed by lesson and condition, sets the `sessionStorage` flag `grasp.consent`, and opens the lesson in the code's condition |
+| Resume request | From the lesson page: `{ sessionId, lessonId, condition }`. Order: the cookie's session, then the body `sessionId`, each only if that row ran the same lesson in the same condition **and** has a `consent_records` row for its `consent_version`. Otherwise 404 and the page redirects to `/consent`; resume never creates a row |
+| Camera gate | The lesson page mounts the lesson, and with it the camera preview and its "Start camera" button, only after a consented session resumes. If the database fails after consent in the same tab (`grasp.consent` set), the lesson runs unsaved with logging off |
+| New row | `participant_code` (6 characters), `assignment_code`, `study_phase` and `condition` from the code, `consent_version`, `lesson_hash`, `app_version` from the deploy commit or `dev` |
+| Response | `sessionId`, `resumed`, `condition`, `studyPhase`, `consentLogging` (from the consent record), `participantCode`, `lessonHash`, `contentChanged` (stored hash differs from current content), `elapsedMs` (server clock since `started_at`, so the client keeps one time base for `t`), `nextSeq` (`max(seq) + 1`), `attempts` (`lesson_attempts` ordered by `t`), `skipped` (`research_sessions.skipped_task_ids`) |
+| Progress (`PATCH /api/session/:id`) | Cookie-gated like the delete. `{ skip: taskId }` appends the task to `skipped_task_ids` once (sent when the learner presses Skip on the remediation card); `{ ended: true }` stamps `ended_at` once (sent when the lesson reaches its results). Both are lesson progress, written for every consented session whatever the logging choice; the client sends them with `keepalive` and only for a saved session |
+| Rebuild | `TaskRunner.resume` in `@grasp/learning` replays the attempt log: opens at the activity of the last attempt with attempts and revealed hint level restored; a reload between remediation and its micro-task counts the micro-task as done |
+| Write guard | `/api/attempts` and `/api/events` reject (403) any row whose `sessionId` differs from the cookie's; the logger transport drops a batch on 403 rather than retrying |
+| Unsaved attempts on close | On `pagehide` the lesson page beacons every attempt not yet acknowledged by `/api/attempts`; the client `id` makes the write idempotent, so a reload resumes with it |
+| Logging and consent | Two gates. Client: the lesson page calls `createLoggerTransport(() => boot.consentLogging)`, and `LogBuffer` drops every event while that is false, so nothing is queued or sent. Server: `/api/events` answers 403 unless the session has a non-withdrawn consent record with `consent_logging = true`. Attempts (`/api/attempts`) are saved for every consented session, because taking part, not the log opt-in, covers them |
+| Database unavailable | No `DATABASE_URL` or Postgres down: every route answers 503 within the 3 s connect timeout, and the lesson runs unsaved with a visible "Not saving" chip |
+
+Limitation: a resumed session whose content changed (`contentChanged`) is still resumed against the new content; the client does not act on the flag yet, and the stored `lesson_hash` keeps the original value, so analysis can detect it.
 
 Eight-point checklist for anonymous sessions:
 
 | Point | Assessment |
 |---|---|
 | 1 Appropriate | The study design is pseudonymous; the product should match it |
-| 2 Limitations | No account recovery; a cleared cookie mid-session loses continuity (mitigated by also storing `sessionId` in `localStorage` as a fallback the server verifies) |
+| 2 Limitations | No account recovery; a cleared cookie mid-session loses continuity (mitigated by also storing `sessionId` in `localStorage`, keyed by lesson and condition, as a fallback the server verifies against the same lesson and condition) |
 | 3 Browser performance | None |
 | 4 Accessibility | Removes a login barrier |
 | 5 Privacy | Strongest option: no identity collected by the product at all |
@@ -353,7 +378,7 @@ Rules that the interfaces enforce:
 - The engine never imports from `vision` or `scene`; it consumes `SceneEvent` and lesson JSON only, so it runs identically for gesture and mouse conditions and in unit tests.
 - The scene never grades. `place` into a wrong socket is still reported as `place`; the engine decides `partial`.
 - The tutor client is the only module that reads `SceneState` for transmission, and it strips the per-frame `position` arrays to one decimal place to keep payloads near 1 KB.
-- The logger is the only module that calls `/api/events`, and it drops everything when `sessionStore.consent.logging` is false.
+- The logger transport is the only module that calls `/api/events`, and its `LogBuffer` drops everything while the session's `consentLogging` is false; the route repeats the check server-side (see [Session create and resume](#session-create-and-resume)). Only four files call the network at all, which a test asserts (see [15 Browser-side guarantees](15-risks-security-scalability.md#browser-side-guarantees)).
 
 ## Open questions
 

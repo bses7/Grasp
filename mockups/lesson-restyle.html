@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grasp lesson restyle mockup</title>
+<!--
+  Static design mockup for the lesson HUD restyle (not app code). Three directions, switched at the top:
+  "Heart studio" (palette sampled from heart_v1's textures), "Sci-fi lab" and "Cozy cartoon" (sage green).
+  The heart is the real models/heart_v1/heart.glb, embedded in heart-glb.js and shown with <model-viewer>
+  (drag to turn it); the background shapes stand in for cheap 3D props the scene would draw.
+  Open this file directly in a browser.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Chakra+Petch:wght@500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<script src="heart-glb.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b0f17; color: #e8eef7; }
+
+  /* ---------- mockup chrome (not part of the design) ---------- */
+  .chrome { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: #000; font-size: 13px; }
+  .chrome b { margin-right: 6px; }
+  .chrome button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #444; background: #1b1b1b; color: #ddd; cursor: pointer; }
+  .chrome button[aria-pressed="true"] { background: #fff; color: #000; }
+  .chrome .sep { width: 1px; height: 22px; background: #333; margin: 0 6px; }
+
+  /* ---------- theme tokens ---------- */
+  .stage[data-theme="lab"] {
+    --bg1: #050b18; --bg2: #0c1f3a; --ink: #e6f6ff; --muted: #8fb3cc;
+    --panel: rgba(8, 22, 44, .78); --panel-edge: #1fd5ff; --accent: #1fd5ff; --accent-ink: #00141c;
+    --ok: #3dffa8; --warn: #ffb547; --bad: #ff5d7a; --gold: #ffd54a;
+    --radius: 6px; --btn-radius: 4px; --display: "Chakra Petch", Inter, sans-serif;
+    --shadow: 0 0 0 1px rgba(31,213,255,.35), 0 0 24px rgba(31,213,255,.18);
+    --btn-shadow: 0 0 0 1px #7beaff inset, 0 0 18px rgba(31,213,255,.55), 0 4px 0 #0a7e99;
+  }
+  .stage[data-theme="cozy"] {
+    --bg1: #dfe8d5; --bg2: #c9d8bc; --ink: #2f3b30; --muted: #5e6e5c;
+    --panel: #f6f8f0; --panel-edge: #2f3b30; --accent: #5f8a63; --accent-ink: #fff;
+    --ok: #3f9a5f; --warn: #d9a441; --bad: #d8655f; --gold: #f2c94c;
+    --radius: 22px; --btn-radius: 999px; --display: "Baloo 2", Inter, sans-serif;
+    --shadow: 0 0 0 3px #2f3b30, 0 6px 0 #2f3b30;
+    --btn-shadow: 0 0 0 3px #2f3b30 inset, 0 6px 0 #2f3b30;
+  }
+  /* Heart studio: colours sampled from heart_v1 (muscle #673a34, fat #ae8c46, atria #4e264f) on sage, maroon's complement */
+  .stage[data-theme="studio"] {
+    --bg1: #c9d5c3; --bg2: #eef2ea; --ink: #3a1f2b; --muted: #6e5a62;
+    --panel: #fbf8f1; --panel-edge: #e4dccb; --accent: #8e3b3a; --accent-ink: #fff8ef;
+    --ok: #4f8a5a; --warn: #b8862f; --bad: #b5523f; --gold: #c9a14a;
+    --radius: 18px; --btn-radius: 14px; --display: "Fraunces", Georgia, serif;
+    --shadow: 0 0 0 1.5px #e4dccb, 0 10px 28px rgba(58,31,43,.16);
+    --btn-shadow: 0 5px 0 #5e2224, 0 10px 18px rgba(94,34,36,.25);
+  }
+
+  /* ---------- stage ---------- */
+  .stage { position: relative; height: calc(100vh - 46px); min-height: 640px; overflow: hidden; color: var(--ink);
+    background: radial-gradient(ellipse at 50% 40%, var(--bg2), var(--bg1) 70%); }
+
+  /* Lab backdrop: perspective floor grid, holo rings, floating specimen cells */
+  .lab-only, .cozy-only { display: none; }
+  .stage[data-theme="lab"] .lab-only { display: block; }
+  .stage[data-theme="cozy"] .cozy-only { display: block; }
+  .floor { position: absolute; left: -50%; right: -50%; bottom: -10%; height: 55%;
+    background-image: linear-gradient(rgba(31,213,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(31,213,255,.35) 1px, transparent 1px);
+    background-size: 60px 60px; transform: perspective(500px) rotateX(62deg); transform-origin: bottom;
+    mask-image: linear-gradient(to top, #000 20%, transparent 85%); }
+  .ring { position: absolute; left: 50%; top: 52%; border: 2px solid rgba(31,213,255,.5); border-radius: 50%;
+    transform: translate(-50%, -50%) rotateX(72deg); }
+  .ring.r1 { width: 380px; height: 380px; animation: spin 14s linear infinite; border-style: dashed; }
+  .ring.r2 { width: 470px; height: 470px; opacity: .45; animation: spin 22s linear infinite reverse; }
+  @keyframes spin { to { transform: translate(-50%, -50%) rotateX(72deg) rotateZ(360deg); } }
+  .cell { position: absolute; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.7), rgba(31,213,255,.25) 40%, rgba(31,213,255,0) 70%);
+    border: 1px solid rgba(31,213,255,.4); animation: bob 6s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-14px); } }
+  .scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); pointer-events: none; }
+
+  /* Cozy backdrop: soft hills, clouds, floating plus-shapes */
+  .hill { position: absolute; border-radius: 50%; }
+  .hill.h1 { width: 140%; height: 50%; left: -20%; bottom: -30%; background: #a9c49b; }
+  .hill.h2 { width: 90%; height: 40%; right: -25%; bottom: -22%; background: #94b487; }
+  .cloud { position: absolute; background: #fff; border-radius: 999px; box-shadow: 0 0 0 3px #2f3b30; animation: drift 18s ease-in-out infinite; }
+  .cloud::before, .cloud::after { content: ""; position: absolute; background: #fff; border-radius: 50%; }
+  .cloud::before { width: 55%; height: 140%; left: 15%; top: -60%; box-shadow: 0 -3px 0 0 #2f3b30, -3px 0 0 0 #2f3b30, 3px 0 0 0 #2f3b30; }
+  @keyframes drift { 50% { transform: translateX(30px); } }
+  .plus { position: absolute; font-family: "Baloo 2"; font-weight: 800; color: #7fa57a; animation: bob 5s ease-in-out infinite; }
+
+  /* Studio backdrop: specimen plinth, soft blood cells */
+  .studio-only { display: none; }
+  .stage[data-theme="studio"] .studio-only { display: block; }
+  .plinth { position: absolute; left: 50%; top: 80%; width: 440px; height: 90px; transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 35%, #fbf8f1, #e2dccd 70%); box-shadow: 0 18px 40px rgba(58,31,43,.18), inset 0 -6px 0 #d3cab5; }
+  .plinth::after { content: ""; position: absolute; inset: 22% 18%; border-radius: 50%; background: radial-gradient(rgba(58,31,43,.28), transparent 70%); }
+  .rbc { position: absolute; border-radius: 50%; background: radial-gradient(circle, #a8504a 0 28%, #8e3b3a 52%, #6e2a2b 72%);
+    box-shadow: 0 6px 14px rgba(94,34,36,.25); filter: blur(.6px); animation: bob 7s ease-in-out infinite; opacity: .85; }
+  .stage[data-theme="studio"] .display { font-weight: 800; letter-spacing: 0; }
+  .stage[data-theme="studio"] .node { background: #fbf8f1; border: 2px solid #d3cab5; color: var(--muted); }
+  .stage[data-theme="studio"] .node.done { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .stage[data-theme="studio"] .node.now { box-shadow: 0 0 0 4px #fbf8f1, 0 0 0 6px var(--accent); }
+  .stage[data-theme="studio"] .link { background: #d3cab5; opacity: 1; }
+  .stage[data-theme="studio"] .quest .tag { color: var(--gold); }
+  .stage[data-theme="studio"] .gbtn.ghost { background: #fbf8f1; color: var(--ink); box-shadow: 0 0 0 2px #d3cab5 inset, 0 4px 0 #d3cab5; }
+  .stage[data-theme="studio"] .gbtn.gold { color: #3a2a10; box-shadow: 0 5px 0 #8f6f2c; }
+  .stage[data-theme="studio"] .gbtn:active { box-shadow: 0 1px 0 #5e2224; }
+  .stage[data-theme="studio"] .socket { border: 3px dashed var(--gold); background: rgba(201,161,74,.12); box-shadow: 0 0 0 6px rgba(201,161,74,.18); }
+  .stage[data-theme="studio"] .cursor { border-color: var(--ink); background: rgba(251,248,241,.7); }
+  .stage[data-theme="studio"] .burst .big { color: var(--ok); text-shadow: 0 3px 0 #fbf8f1, 0 8px 20px rgba(58,31,43,.2); }
+  .stage[data-theme="studio"] .cam .feed { background: linear-gradient(135deg, #d9d2c4, #efe9dd); }
+  .stage[data-theme="studio"] .scrim { background: rgba(58,31,43,.28); }
+
+  /* ---------- the model (real heart_v1 via model-viewer) ---------- */
+  .model { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 460px; }
+  .model model-viewer { width: 100%; height: 460px; background: transparent; --poster-color: transparent; }
+  .stage[data-theme="lab"] .model { filter: drop-shadow(0 0 28px rgba(31,213,255,.45)); }
+  .socket { position: absolute; width: 74px; height: 74px; border-radius: 50%; border: 3px dashed var(--accent); left: 64%; top: 56%;
+    box-shadow: 0 0 22px var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .stage[data-theme="cozy"] .socket { border: 4px dashed #2f3b30; background: rgba(255,255,255,.55); box-shadow: none; }
+  @keyframes pulse { 50% { transform: scale(1.08); } }
+  .cursor { position: absolute; left: 70%; top: 63%; width: 34px; height: 34px; border-radius: 50%; border: 3px solid #fff; background: rgba(255,255,255,.2); }
+  .stage[data-theme="cozy"] .cursor { border-color: #2f3b30; background: #fff; }
+
+  /* ---------- HUD ---------- */
+  .hud { position: absolute; inset: 0; pointer-events: none; }
+  .hud > * { pointer-events: auto; }
+  .panel { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+  .display { font-family: var(--display); font-weight: 700; letter-spacing: .01em; }
+
+  /* Level path (replaces the progress chip) */
+  .path { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 0; padding: 10px 18px; }
+  .node { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 14px;
+    background: rgba(255,255,255,.08); color: var(--muted); border: 2px solid var(--muted); }
+  .stage[data-theme="cozy"] .node { background: #fff; border: 3px solid #2f3b30; color: #2f3b30; }
+  .node.done { background: var(--ok); border-color: var(--ok); color: #0b2a1c; }
+  .stage[data-theme="cozy"] .node.done { background: var(--ok); border-color: #2f3b30; color: #fff; }
+  .node.now { width: 44px; height: 44px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 0 18px var(--accent); }
+  .stage[data-theme="cozy"] .node.now { border-color: #2f3b30; box-shadow: 0 4px 0 #2f3b30; }
+  .link { width: 34px; height: 4px; background: var(--muted); opacity: .5; }
+  .link.done { background: var(--ok); opacity: 1; }
+  .stage[data-theme="cozy"] .link { height: 5px; background: #2f3b30; opacity: .35; }
+  .stage[data-theme="cozy"] .link.done { background: #2f3b30; opacity: 1; }
+  .path-label { margin-left: 14px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .path-label strong { display: block; color: var(--ink); font-family: var(--display); font-size: 15px; }
+
+  /* Quest card (replaces the instruction line) */
+  .quest { position: absolute; top: 96px; left: 20px; width: 330px; padding: 16px 18px; }
+  .quest .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); font-weight: 700; }
+  .stage[data-theme="cozy"] .quest .tag { color: #46704b; }
+  .quest h2 { margin: 6px 0 4px; font-size: 22px; line-height: 1.15; }
+  .quest p { margin: 0; color: var(--muted); font-size: 14px; }
+  .tries { display: flex; gap: 6px; margin-top: 12px; align-items: center; font-size: 12px; color: var(--muted); }
+  .pip { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+  .pip.used { background: transparent; border: 2px solid var(--muted); }
+  .stage[data-theme="cozy"] .pip { border: 2px solid #2f3b30; }
+
+  /* Game buttons */
+  .gbtn { font-family: var(--display); font-weight: 700; font-size: 17px; border: 0; cursor: pointer; padding: 14px 24px; min-height: 52px;
+    border-radius: var(--btn-radius); background: var(--accent); color: var(--accent-ink); box-shadow: var(--btn-shadow);
+    display: inline-flex; align-items: center; gap: 10px; transition: transform .08s, box-shadow .08s; text-transform: none; }
+  .stage[data-theme="lab"] .gbtn { text-transform: uppercase; letter-spacing: .08em; font-size: 15px; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+  .gbtn:active { transform: translateY(4px); box-shadow: 0 0 0 3px #2f3b30 inset, 0 2px 0 #2f3b30; }
+  .stage[data-theme="lab"] .gbtn:active { box-shadow: 0 0 0 1px #7beaff inset, 0 0 26px rgba(31,213,255,.8), 0 1px 0 #0a7e99; }
+  .gbtn.ghost { background: transparent; color: var(--ink); box-shadow: 0 0 0 2px var(--muted) inset; }
+  .stage[data-theme="cozy"] .gbtn.ghost { background: #fff; box-shadow: var(--btn-shadow); }
+  .gbtn.gold { background: var(--gold); color: #3b2a00; }
+  .gbtn svg { width: 22px; height: 22px; }
+
+  /* Clue button (hint) */
+  .clue { position: absolute; right: 20px; top: 96px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .clue-count { font-size: 12px; color: var(--muted); }
+
+  /* Side "start" button */
+  .side { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); }
+  .side .gbtn { font-size: 20px; padding: 20px 28px; }
+
+  /* Hint card */
+  .hint { position: absolute; right: 20px; top: 190px; width: 300px; padding: 16px 18px; }
+  .hint .lvl { display: flex; gap: 4px; margin: 6px 0 8px; }
+  .hint .lvl span { width: 26px; height: 6px; border-radius: 3px; background: var(--warn); }
+  .hint .lvl span.off { background: rgba(127,127,127,.3); }
+  .hint p { margin: 0; font-size: 15px; }
+
+  /* Feedback burst */
+  .burst { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; animation: pop .5s cubic-bezier(.2,1.6,.4,1) both; }
+  @keyframes pop { from { transform: translate(-50%, -50%) scale(.4); opacity: 0; } }
+  .burst .big { font-family: var(--display); font-weight: 800; font-size: 54px; color: var(--ok); text-shadow: 0 0 24px var(--ok); line-height: 1; }
+  .stage[data-theme="cozy"] .burst .big { color: #fff; -webkit-text-stroke: 3px #2f3b30; text-shadow: 0 5px 0 #2f3b30; }
+  .burst .sub { margin-top: 8px; font-size: 15px; padding: 8px 14px; display: inline-block; }
+  .spark { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); animation: fly .9s ease-out both; }
+  @keyframes fly { from { transform: translate(0,0) scale(1); opacity: 1; } to { opacity: 0; } }
+
+  /* Hand chip + camera */
+  .hand { position: absolute; left: 20px; bottom: 182px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .cam { position: absolute; left: 20px; bottom: 20px; width: 256px; height: 144px; overflow: hidden; }
+  .cam .feed { position: absolute; inset: 6px; border-radius: calc(var(--radius) - 4px); background: linear-gradient(135deg, #2a2f3a, #474f60); }
+  .stage[data-theme="cozy"] .cam .feed { background: linear-gradient(135deg, #b9cbb0, #e1e9da); }
+  .cam svg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 90px; }
+  .cam .live { position: absolute; top: 12px; left: 12px; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; display: flex; gap: 6px; align-items: center; }
+
+  /* Controls strip */
+  .controls { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; gap: 14px; padding: 10px 16px; font-size: 13px; color: var(--muted); }
+  .key { display: inline-flex; align-items: center; gap: 6px; }
+  .key b { font-family: var(--display); color: var(--ink); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--muted); }
+
+  /* Remediation (help) dialog */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; }
+  .dialog { width: min(480px, 92%); padding: 24px; text-align: center; }
+  .dialog h3 { margin: 6px 0; font-size: 26px; }
+  .dialog p { color: var(--muted); margin: 0 0 18px; }
+  .dialog .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .mascot { width: 72px; height: 72px; margin: 0 auto; }
+
+  /* Results */
+  .results { width: min(620px, 94%); padding: 26px; }
+  .results h3 { margin: 0; font-size: 30px; text-align: center; }
+  .stars { display: flex; justify-content: center; gap: 8px; margin: 10px 0 18px; }
+  .stars svg { width: 54px; height: 54px; }
+  .obj { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-items: center; padding: 10px 0; border-top: 1px solid rgba(127,127,127,.25); }
+  .obj .name { font-size: 14px; }
+  .medal { font-family: var(--display); font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 999px; }
+  .medal.m { background: var(--gold); color: #3b2a00; }
+  .medal.a { background: #c9d6e3; color: #22303d; }
+  .medal.d { background: #e3b48c; color: #3d2410; }
+  .bar { grid-column: 1 / -1; height: 10px; border-radius: 6px; background: rgba(127,127,127,.25); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--ok); }
+  .code { margin-top: 16px; text-align: center; font-size: 14px; color: var(--muted); }
+  .code b { font-family: var(--display); font-size: 20px; color: var(--ink); letter-spacing: .12em; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="chrome">
+  <b>Direction:</b>
+  <button type="button" data-theme-btn="studio" aria-pressed="true">Heart studio</button>
+  <button type="button" data-theme-btn="lab" aria-pressed="false">Sci-fi lab</button>
+  <button type="button" data-theme-btn="cozy" aria-pressed="false">Cozy cartoon</button>
+  <span class="sep"></span>
+  <b>Screen:</b>
+  <button type="button" data-screen-btn="start" aria-pressed="false">Look around</button>
+  <button type="button" data-screen-btn="task" aria-pressed="true">Task + clue</button>
+  <button type="button" data-screen-btn="correct" aria-pressed="false">Correct snap</button>
+  <button type="button" data-screen-btn="help" aria-pressed="false">Need help</button>
+  <button type="button" data-screen-btn="results" aria-pressed="false">Results</button>
+</div>
+
+<main class="stage" id="stage" data-theme="studio" data-screen="task">
+  <!-- backdrop: studio -->
+  <div class="studio-only" aria-hidden="true">
+    <div class="plinth"></div>
+    <div class="rbc" style="width:46px;height:46px;left:12%;top:30%"></div>
+    <div class="rbc" style="width:28px;height:28px;left:22%;top:66%;animation-delay:-3s"></div>
+    <div class="rbc" style="width:56px;height:56px;right:11%;top:58%;animation-delay:-5s"></div>
+    <div class="rbc" style="width:22px;height:22px;right:22%;top:20%;animation-delay:-1.5s"></div>
+  </div>
+  <!-- backdrop: lab -->
+  <div class="lab-only" aria-hidden="true">
+    <div class="floor"></div>
+    <div class="ring r1"></div><div class="ring r2"></div>
+    <div class="cell" style="width:70px;height:70px;left:12%;top:58%"></div>
+    <div class="cell" style="width:40px;height:40px;left:20%;top:30%;animation-delay:-2s"></div>
+    <div class="cell" style="width:90px;height:90px;right:13%;top:62%;animation-delay:-4s"></div>
+    <div class="cell" style="width:30px;height:30px;right:24%;top:22%;animation-delay:-1s"></div>
+    <div class="scan"></div>
+  </div>
+  <!-- backdrop: cozy -->
+  <div class="cozy-only" aria-hidden="true">
+    <div class="hill h1"></div><div class="hill h2"></div>
+    <div class="cloud" style="width:120px;height:36px;left:8%;top:22%"></div>
+    <div class="cloud" style="width:90px;height:28px;right:10%;top:16%;animation-delay:-6s"></div>
+    <div class="plus" style="left:16%;top:55%;font-size:40px">+</div>
+    <div class="plus" style="right:18%;top:40%;font-size:28px;animation-delay:-2s">+</div>
+    <div class="plus" style="left:30%;top:18%;font-size:24px;animation-delay:-3s">+</div>
+  </div>
+
+  <!-- the real heart_v1 model -->
+  <div class="model">
+    <model-viewer id="heart" alt="Heart model" camera-controls auto-rotate rotation-per-second="10deg" interaction-prompt="none"
+      environment-image="neutral" exposure="1.15" shadow-intensity="0"></model-viewer>
+  </div>
+  <div class="socket" data-on="task help"></div>
+  <div class="cursor" data-on="task help" aria-hidden="true"></div>
+
+  <div class="hud">
+    <!-- level path -->
+    <nav class="path panel" aria-label="Lesson progress">
+      <span class="node done">1</span><span class="link done"></span>
+      <span class="node done" data-on="task correct help results">2</span><span class="node now" data-on="start">2</span><span class="link done" data-on="task correct help results"></span><span class="link" data-on="start"></span>
+      <span class="node now" data-on="task correct help">3</span><span class="node" data-on="start">3</span><span class="node done" data-on="results">3</span><span class="link"></span>
+      <span class="node">4</span><span class="link"></span>
+      <span class="node">5</span><span class="link"></span>
+      <span class="node" aria-label="Final check">★</span>
+      <span class="path-label"><strong data-on="start">Look around</strong><strong data-on="task correct help">Build the heart</strong><strong data-on="results">Lesson complete</strong>Stage <span data-on="start">2</span><span data-on="task correct help results">3</span> of 6</span>
+    </nav>
+
+    <!-- quest card -->
+    <section class="quest panel" data-on="start task correct help">
+      <span class="tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z"/></svg>
+        <span data-on="start">Explore</span><span data-on="task correct help">Mission 3 · 2 of 4</span></span>
+      <h2 class="display" data-on="start">Spin the heart and tap the glowing spots</h2>
+      <h2 class="display" data-on="task correct help">Put the left ventricle back</h2>
+      <p data-on="start">Six spots hide a fact each. Start the mission when you are ready.</p>
+      <p data-on="task correct help">Pinch it, carry it to the glowing ring, and let go.</p>
+      <div class="tries" data-on="task correct help"><span class="pip"></span><span class="pip"></span><span class="pip used"></span> 2 tries left</div>
+    </section>
+
+    <!-- clue button + hint -->
+    <div class="clue" data-on="task">
+      <button type="button" class="gbtn ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Clue</button>
+      <span class="clue-count">2 clues left · each costs a little score</span>
+    </div>
+    <section class="hint panel" data-on="task">
+      <span class="tag display" style="color:var(--warn);font-size:12px;letter-spacing:.12em;text-transform:uppercase">Clue 1</span>
+      <div class="lvl"><span></span><span class="off"></span><span class="off"></span></div>
+      <p>It is the thickest chamber, on the lower left of the heart as it faces you.</p>
+    </section>
+
+    <!-- start button (explore) -->
+    <div class="side" data-on="start">
+      <button type="button" class="gbtn">Start the mission
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+
+    <!-- correct burst -->
+    <div class="burst" data-on="correct" role="status">
+      <div class="big">Perfect fit!</div>
+      <div class="sub panel">Left ventricle placed · first try</div>
+      <span class="spark" style="left:-30px;top:10px"></span><span class="spark" style="left:110%;top:0;background:var(--ok)"></span>
+      <span class="spark" style="left:20%;top:-30px;background:var(--accent)"></span><span class="spark" style="left:80%;top:90%"></span>
+    </div>
+
+    <!-- hand + camera -->
+    <div class="hand panel" data-on="start task correct help"><span class="dot"></span><span data-on="start correct help">Hand found</span><span data-on="task">Holding · drag to the ring</span></div>
+    <div class="cam panel" data-on="start task correct help">
+      <div class="feed"></div>
+      <svg viewBox="0 0 100 100" aria-hidden="true"><g stroke="#4fd1c5" stroke-width="3" fill="none"><path d="M50 90 L50 60 L35 30 M50 60 L48 22 M50 60 L60 25 M50 60 L70 34 M50 60 L30 62 L22 48"/></g><g fill="#f6e05e"><circle cx="50" cy="90" r="4"/><circle cx="50" cy="60" r="4"/><circle cx="35" cy="30" r="4"/><circle cx="48" cy="22" r="4"/><circle cx="60" cy="25" r="4"/><circle cx="70" cy="34" r="4"/><circle cx="22" cy="48" r="4"/></g></svg>
+      <span class="live"><span class="dot" style="width:7px;height:7px"></span>Tracking</span>
+    </div>
+
+    <!-- controls strip -->
+    <div class="controls panel" data-on="start task correct">
+      <span class="key"><b>☝ hold</b> pick</span><span class="key"><b>🤏</b> grab</span><span class="key"><b>🤏 empty</b> spin</span><span class="key"><b>✋</b> let go</span>
+    </div>
+
+    <!-- help (remediation) -->
+    <div class="scrim" data-on="help">
+      <section class="dialog panel" role="dialog" aria-label="Need a hand?">
+        <svg class="mascot" viewBox="0 0 80 80" aria-hidden="true"><path d="M40 72 C 16 58 6 42 8 28 C 10 14 26 10 34 18 C 37 21 39 24 40 27 C 41 24 43 21 46 18 C 54 10 70 14 72 28 C 74 42 64 58 40 72 Z" fill="#c84b5a" stroke="#2f3b30" stroke-width="3"/><circle cx="30" cy="36" r="4" fill="#2f3b30"/><circle cx="50" cy="36" r="4" fill="#2f3b30"/><path d="M32 48 Q 40 54 48 48" stroke="#2f3b30" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+        <h3 class="display">That one is tricky!</h3>
+        <p>Watch it once, then try again. Skipped parts wait for you at the end.</p>
+        <div class="row">
+          <button type="button" class="gbtn">Show me</button>
+          <button type="button" class="gbtn ghost">Try once more</button>
+          <button type="button" class="gbtn ghost">Skip for now</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- results -->
+    <div class="scrim" data-on="results">
+      <section class="results panel" aria-label="Your results">
+        <h3 class="display">Lesson complete!</h3>
+        <div class="stars" aria-label="2 of 3 stars">
+          <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z" fill="var(--gold)" stroke="#2f3b30" stroke-width="1.5"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z" fill="var(--gold)" stroke="#2f3b30" stroke-width="1.5"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5L5.5 20l2-7L2 9h7z" fill="rgba(127,127,127,.3)" stroke="#2f3b30" stroke-width="1.5"/></svg>
+        </div>
+        <div class="obj"><span class="name">Name the four chambers and two great vessels</span><span class="medal m">Mastered</span><span class="bar"><i style="width:92%"></i></span></div>
+        <div class="obj"><span class="name">Place each part in its socket</span><span class="medal a">Almost</span><span class="bar"><i style="width:74%"></i></span></div>
+        <div class="obj"><span class="name">Trace blood through the heart in order</span><span class="medal d">Growing</span><span class="bar"><i style="width:48%"></i></span></div>
+        <p class="code">Your participant code <b>ZK3FS9</b> · write it down</p>
+        <div class="row" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="gbtn gold">Review 2 parts</button>
+          <button type="button" class="gbtn ghost">Try again</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+  // Mockup switching only: which direction and which screen is shown.
+  const stage = document.getElementById("stage");
+  // setAttribute, not .src: the module script upgrades <model-viewer> later, and an own .src property would shadow its setter.
+  document.getElementById("heart").setAttribute("src", window.HEART_GLB);
+  const show = () => {
+    const s = stage.dataset.screen;
+    stage.querySelectorAll("[data-on]").forEach((el) => (el.hidden = !el.dataset.on.split(" ").includes(s)));
+  };
+  document.querySelectorAll("[data-theme-btn]").forEach((b) =>
+    b.addEventListener("click", () => {
+      stage.dataset.theme = b.dataset.themeBtn;
+      document.querySelectorAll("[data-theme-btn]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    }),
+  );
+  document.querySelectorAll("[data-screen-btn]").forEach((b) =>
+    b.addEventListener("click", () => {
+      stage.dataset.screen = b.dataset.screenBtn;
+      document.querySelectorAll("[data-screen-btn]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      show();
+    }),
+  );
+  show();
+</script>
+</body>
+</html>

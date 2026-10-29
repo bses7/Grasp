@@ -103,12 +103,12 @@ describe("TaskRunner on prototype_v0", () => {
     expect(r.attempts).toHaveLength(0);
   });
 
-  it("retries until maxAttempts (3), then moves on with the task marked failed", () => {
+  it("retries until maxAttempts (3), then remediates instead of moving on (guided activity, doc 06)", () => {
     const r = runner();
     expect(r.onSceneEvent(place("pulmonary_artery", "socket_aorta"))).toMatchObject({ next: "retry", attemptNo: 1 });
     expect(r.onSceneEvent(place("aorta", "socket_pulmonary_artery"))).toMatchObject({ next: "retry", attemptNo: 2 });
-    expect(r.onSceneEvent(place("pulmonary_artery", "socket_aorta"))).toMatchObject({ next: "next_task", attemptNo: 3 });
-    expect(r.task?.id).toBe("t_p2");
+    expect(r.onSceneEvent(place("pulmonary_artery", "socket_aorta"))).toMatchObject({ next: "remediate", attemptNo: 3 });
+    expect(r.task?.id).toBe("t_p1__micro");
   });
 });
 

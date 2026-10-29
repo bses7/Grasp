@@ -14,7 +14,12 @@
  * M8: `highlight` with an outcome style tints the part green, amber or pink-red for a moment.
  * M9: loads the GLB named by the manifest; nodes named after component ids become components, `socket_*`
  * nodes are skipped (the manifest carries their poses), and every other node is static scenery.
- * Orbit and hotspots are Phase 4.
+ * Phase 4 step 4.0: a `hover` (the point gesture) held on one part for DWELL_SELECT_MS selects it, with a
+ * fill ring on the cursor; a pinch selects even when the activity disallows grabbing; Enter selects.
+ * Phase 4 step 4.3: whole-model orbit (a grab that starts on empty space, arrows with nothing grabbed),
+ * dolly (+ / - and the wheel, off under studyParity), named poses (`setPose`, the `pose` prop, X toggles
+ * exploded), hotspot markers (dwell, Tab, Enter; a DOM label on hover or focus), the hint pulse (`highlight`
+ * without a style), `cameraTo` a component or hotspot, and `setVisible` / `visibleComponents`.
  */
 import type {
   HoverResult,
@@ -26,20 +31,22 @@ import type {
   SocketVisual,
 } from "@grasp/types";
 import { Canvas, useThree } from "@react-three/fiber";
+import { tokens } from "@grasp/ui";
 import { memo, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type RefObject } from "react";
-import type { Mesh, MeshStandardMaterial, Object3D } from "three";
-import type { Transform } from "@grasp/types";
+import { Vector3, type Mesh, type MeshBasicMaterial, type MeshStandardMaterial, type Object3D } from "three";
+import type { CameraPose, Transform } from "@grasp/types";
 import { parseGlb } from "../model-loader";
-import { applySceneCommand } from "../commands";
 import { SCENE_CONSTANTS } from "../constants";
 import { landmarkToNdc, type Ndc, type Viewport } from "../coords";
 import { beginGrab, endGrab, moveGrab, rebaseGrab, type GrabState } from "../drag-plane";
 import { createInteractableRaycaster } from "../raycast";
 import { snapshotSceneState } from "../scene-state";
-import { snapTo, tweenTo, type SocketOccupancy } from "../sockets";
+import { nearestAcceptingSocket, snapTo, tweenTo, type SocketOccupancy } from "../sockets";
+import { cameraPosition, dolly, lerpPose, orbitFrom, poseFacing } from "../orbit";
 import { ComponentMesh } from "./component-mesh";
+import { Hotspot, HOTSPOT_COLOR } from "./hotspot";
 import { KEY_MAP } from "./mouse-controls";
-import { SocketMarker } from "./socket-marker";
+import { RING_COLOR, SocketMarker } from "./socket-marker";
 
 /**
  * Which frame a cursor is in. "camera": the mirrored webcam frame, mapped through `viewport` (cover-fit).
@@ -66,6 +73,10 @@ export type LessonSceneProps = {
   allowGrab?: boolean;
   allowOrbit?: boolean;
   socketVisual?: SocketVisual;
+  /** Hotspot markers; default true. Off where their labels would give answers away (graded activities). */
+  showHotspots?: boolean;
+  /** Only these components are shown; omit to show all (activity `scene.visibleComponents`). */
+  visibleComponents?: string[];
   /** Base URL the GLB is served under, as <base>/<manifest.id>/<manifest.file>; default "/models". */
   assetBaseUrl?: string;
   /** Self-hosted Draco decoder directory; default "/draco/". */
@@ -73,6 +84,8 @@ export type LessonSceneProps = {
   /** Disables capabilities listed in STUDY_PARITY_DISABLES (camera dolly). */
   studyParity?: boolean;
   reducedMotion?: boolean;
+  /** Slow turntable (the introduction), stopped for the rest of the activity by any grab, orbit, key or zoom. */
+  autoRotate?: boolean;
   /** Camera-frame geometry for the gesture cursor (M6). Omit for the mouse: its cursor is already canvas-relative. */
   viewport?: Partial<Viewport>;
   onSceneEvent: (event: SceneEvent) => void;
@@ -91,10 +104,39 @@ const SR_ONLY: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const TINT = { none: 0x000000, focused: 0x1e3a8a, hovered: 0x2f5d3a, grabbed: 0x6b4423 };
-/** Emissive versions of the doc 11 success / partial / error roles (dimmed: emissive adds to the base colour). */
-const OUTCOME_TINT = { correct: 0x1f8f52, partial: 0x9c6a1c, incorrect: 0x9e2a40 };
+/** Emissive tints from the doc 11 roles (tokens.sceneTint; dimmed because emissive adds to the base colour). */
+const TINT = tokens.sceneTint;
+const OUTCOME_TINT = { correct: TINT.correct, partial: TINT.partial, incorrect: TINT.incorrect };
 const OUTCOME_TINT_MS = 1200;
+/** Hint pulse colour (gold `highlight`); intensity swings at 1 Hz for HINT_PULSE_MS. */
+const PULSE_TINT = TINT.pulse;
+/** Camera tween for cameraTo. */
+const CAMERA_TWEEN_MS = 600;
+/** Orbit degrees per arrow press with nothing grabbed; Shift multiplies. */
+const KEY_ORBIT_DEG = 10;
+const DOLLY_STEP = 1.1;
+/** demonstrate: tween into the socket, hold, tween back. */
+const DEMO_TWEEN_MS = 700;
+const DEMO_HOLD_MS = 900;
+/** The camera and its aim sit this far above the model origin, so the model shows a little below centre (over the plinth). */
+const VIEW_LIFT = 1.5;
+/** Turntable speed for autoRotate. */
+const SPIN_DEG_PER_S = 12;
+
+const LABEL_STYLE: CSSProperties = {
+  position: "absolute",
+  left: 0,
+  top: 0,
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: tokens.sceneDom.labelBg,
+  color: tokens.sceneDom.ink,
+  boxShadow: "0 0 0 1.5px #e4dccb, 0 4px 12px rgba(58,31,43,.16)",
+  font: tokens.sceneDom.font,
+  pointerEvents: "none",
+  whiteSpace: "nowrap",
+  display: "none",
+};
 
 const CURSOR_STYLE: CSSProperties = {
   position: "absolute",
@@ -104,42 +146,57 @@ const CURSOR_STYLE: CSSProperties = {
   height: 22,
   margin: -11,
   borderRadius: "50%",
-  border: "3px solid #f7fafc",
-  boxShadow: "0 0 0 2px rgba(0,0,0,0.5)",
+  // Plum ring on a cream fill: the ring alone is 1.6:1 on the heart muscle, the fill makes it 5.3:1 (doc 11).
+  border: `3px solid ${tokens.sceneDom.ink}`,
+  background: tokens.sceneDom.cursorFill,
   pointerEvents: "none",
   display: "none",
+  zIndex: 50, // above HUD cards and dialogs, so the hand can aim at their buttons
 };
 /** Keyboard cursor step in NDC per arrow press; Shift multiplies. */
 const KEY_NDC_STEP = 0.03;
 
-function cameraPosition({ azimuth, elevation, distance }: ModelManifest["defaultCamera"]): [number, number, number] {
-  const az = (azimuth * Math.PI) / 180;
-  const el = (elevation * Math.PI) / 180;
-  return [distance * Math.cos(el) * Math.sin(az), distance * Math.sin(el), distance * Math.cos(el) * Math.cos(az)];
-}
-
 export function LessonScene(props: LessonSceneProps) {
   const [announcement, setAnnouncement] = useState("");
   const keyHandler = useRef<((e: KeyboardEvent) => void) | undefined>(undefined);
+  const wheelHandler = useRef<((e: WheelEvent) => void) | undefined>(undefined);
   const cursorEl = useRef<HTMLDivElement>(null);
+  const labelEl = useRef<HTMLDivElement>(null);
+  // Stable: R3F re-applies a changed camera prop on every render, which would undo the orbit.
+  const [cameraOpts] = useState(() => {
+    const [x, y, z] = cameraPosition(props.manifest.defaultCamera);
+    return { fov: 45, near: 0.1, far: 500, position: [x, y + VIEW_LIFT, z] as [number, number, number] };
+  });
   return (
     <div
       style={{ position: "relative", width: "100%", height: "100%" }}
       tabIndex={0}
-      aria-label="3D scene. Tab to choose a part, Space to grab or release it, arrow keys to move it."
+      aria-label="3D scene. Tab to choose a part or marker, Enter to select it, Space to grab or release it, arrow keys to move it or, with nothing held, to turn the model. X explodes, R resets."
       onKeyDown={(e) => keyHandler.current?.(e.nativeEvent)}
+      onWheel={(e) => wheelHandler.current?.(e.nativeEvent)}
     >
       <Canvas
         frameloop="demand"
         dpr={[...SCENE_CONSTANTS.DPR_RANGE]}
-        camera={{ fov: 45, near: 0.1, far: 500, position: cameraPosition(props.manifest.defaultCamera) }}
-        onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
+        camera={cameraOpts}
+        onCreated={({ camera }) => camera.lookAt(0, VIEW_LIFT, 0)}
+        // Transparent: the CSS studio backdrop shows through (doc 05 section 10, doc 11 "Backdrop").
+        gl={{ alpha: true }}
         style={{ touchAction: "none" }}
       >
-        <hemisphereLight intensity={0.8} />
-        <directionalLight position={[10, 20, 30]} intensity={1.8} />
-        <SceneController {...props} announce={setAnnouncement} keyHandler={keyHandler} cursorEl={cursorEl} />
+        {/* Still doc 05's one hemisphere plus one directional light; brighter, and the key light comes from the front. */}
+        <hemisphereLight args={["#fff8ef", "#c9d5c3"]} intensity={1.6} />
+        <directionalLight position={[6, 14, 30]} intensity={2.8} />
+        <SceneController
+          {...props}
+          announce={setAnnouncement}
+          keyHandler={keyHandler}
+          wheelHandler={wheelHandler}
+          cursorEl={cursorEl}
+          labelEl={labelEl}
+        />
       </Canvas>
+      <div ref={labelEl} style={LABEL_STYLE} aria-hidden />
       {/* Gesture cursor: moved by style.transform from the controller, never by React state. */}
       <div ref={cursorEl} style={CURSOR_STYLE} aria-hidden />
       <p style={SR_ONLY} aria-live="polite">
@@ -152,7 +209,9 @@ export function LessonScene(props: LessonSceneProps) {
 type ControllerProps = LessonSceneProps & {
   announce: (text: string) => void;
   keyHandler: MutableRefObject<((e: KeyboardEvent) => void) | undefined>;
+  wheelHandler: MutableRefObject<((e: WheelEvent) => void) | undefined>;
   cursorEl: RefObject<HTMLDivElement | null>;
+  labelEl: RefObject<HTMLDivElement | null>;
 };
 
 /**
@@ -194,6 +253,24 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     outcome: Map<string, number>;
     /** Each component's transform as authored in the GLB (the assembled pose), for reset. */
     original: Map<string, Transform>;
+    /** Dwell-select on the debounced hovered id; fires once per continuous dwell. */
+    dwell: { id: string | null; since: number; fired: boolean };
+    /** Hotspot markers by hotspot id. */
+    markers: Map<string, Mesh>;
+    /** Socket ring meshes, and the one lit because the held part would snap into it on release. */
+    rings: Map<string, Mesh>;
+    inRange: string | null;
+    /** Orbit camera pose, and the drag that is turning it (a grab that started on empty space). */
+    cam: CameraPose;
+    orbit: { start: Ndc; cam0: CameraPose } | null;
+    /** Bumped to cancel a running camera tween. */
+    camTween: number;
+    /** Hint pulses by component id: start time. */
+    pulse: Map<string, number>;
+    /** The named pose last applied. */
+    pose: string;
+    /** autoRotate: the learner took over, so the turntable stops for this activity. */
+    spinOff: boolean;
   } | null>(null);
   s.current ??= {
     objects: new Map(),
@@ -210,15 +287,35 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     rebase: false,
     outcome: new Map(),
     original: new Map(),
+    dwell: { id: null, since: 0, fired: false },
+    markers: new Map(),
+    rings: new Map(),
+    inRange: null,
+    cam: { ...manifest.defaultCamera },
+    orbit: null,
+    camTween: 0,
+    pulse: new Map(),
+    pose: props.pose ?? Object.keys(manifest.poses)[0] ?? "",
+    spinOff: false,
   };
   const st = s.current;
-
-  const startPose = manifest.poses[props.pose ?? Object.keys(manifest.poses)[0] ?? ""] ?? {};
   function syncFilled() {
     setFilled(new Set(Object.keys(st.occupancy).filter((k) => st.occupancy[k])));
   }
-  const nameOf = (id: string) => manifest.components.find((c) => c.id === id)?.name ?? id;
-  const focusable = () => live.current.props.manifest.components.filter((c) => c.interactable).map((c) => c.id);
+  /** Graded activities (no hotspots) never speak a part's name or socket, or the screen reader would give identify answers away. */
+  const graded = () => live.current.props.showHotspots === false;
+  const nameOf = (id: string) =>
+    graded() ? "part" : (manifest.components.find((c) => c.id === id)?.name ?? manifest.hotspots.find((h) => h.id === id)?.label ?? id);
+  const isVisible = (o: Object3D | undefined) => {
+    for (let x = o ?? null; x; x = x.parent) if (!x.visible) return false;
+    return !!o;
+  };
+  /** Tab order: visible interactable components, each followed by its visible hotspots. */
+  const focusable = () =>
+    live.current.props.manifest.components
+      .filter((c) => c.interactable && isVisible(st.objects.get(c.id)))
+      .flatMap((c) => [c.id, ...manifest.hotspots.filter((h) => h.componentId === c.id && st.markers.has(h.id)).map((h) => h.id)]);
+  const interactables = () => [...st.objects.values()].filter((o) => o.visible);
 
   // The start pose is applied once per component id, ever: a ref detach/re-attach on re-render must
   // never move a part that the learner has already dragged or placed.
@@ -226,7 +323,7 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     if (!o) return void st.objects.delete(id);
     if (!st.posed.has(id)) {
       st.original.set(id, { position: o.position.toArray(), rotation: [o.rotation.x, o.rotation.y, o.rotation.z] });
-      const tr = startPose[id];
+      const tr = live.current.props.manifest.poses[st.pose]?.[id];
       if (tr) {
         o.position.set(...tr.position);
         o.rotation.set(...tr.rotation);
@@ -268,26 +365,124 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest.id, manifest.file]);
 
-  /** Emissive tint: grabbed beats outcome feedback beats hovered beats keyboard focus. */
+  const registerRing = useRef((id: string, m: Mesh | null) => {
+    if (m) st.rings.set(id, m);
+    else st.rings.delete(id);
+  }).current;
+
+  /** Light the ring the held part would snap into ("release to place here", doc 11 pre-commit states). */
+  const lightRing = (id: string | null) => {
+    if (id === st.inRange) return;
+    for (const [rid, ring] of st.rings) {
+      const mat = ring.material as MeshBasicMaterial;
+      mat.color.setHex(rid === id ? RING_COLOR.inRange : RING_COLOR.idle);
+    }
+    st.inRange = id;
+  };
+
+  /**
+   * While held, a part draws over everything (no depth test), so it stays visible when it passes behind
+   * another part, e.g. the aorta behind the pulmonary artery on its way into its socket.
+   */
+  const drawOnTop = (o: Object3D, onTop: boolean) =>
+    o.traverse((c) => {
+      const m = (c as Mesh).material as MeshStandardMaterial | undefined;
+      if (!m || c.userData.hotspotId) return;
+      m.depthTest = !onTop;
+      c.renderOrder = onTop ? 20 : 0;
+    });
+
+  const registerMarker = useRef((id: string, m: Mesh | null) => {
+    if (m) st.markers.set(id, m);
+    else st.markers.delete(id);
+  }).current;
+
+  /** Emissive tint: grabbed beats outcome feedback beats the hint pulse beats hovered beats keyboard focus. */
   const refresh = () => {
     const focusedId = focusable()[st.focus];
+    const now = performance.now();
+    for (const [id, start] of st.pulse) if (now - start > SCENE_CONSTANTS.HINT_PULSE_MS) st.pulse.delete(id);
     for (const [id, o] of st.objects) {
+      const pulse = st.pulse.has(id) && st.grab?.componentId !== id && !st.outcome.has(id);
       const hex =
         st.grab?.componentId === id
           ? TINT.grabbed
           : st.outcome.has(id)
             ? st.outcome.get(id)!
-            : st.hovered === id
-            ? TINT.hovered
-            : focusedId === id
-              ? TINT.focused
-              : TINT.none;
+            : pulse
+              ? PULSE_TINT
+              : st.hovered === id
+                ? TINT.hovered
+                : focusedId === id
+                  ? TINT.focused
+                  : TINT.none;
+      // 1 Hz: full at the start of each second, dark at the half.
+      const k = pulse && !live.current.props.reducedMotion ? 0.5 + 0.5 * Math.cos((2 * Math.PI * (now - st.pulse.get(id)!)) / 1000) : 1;
       o.traverse((c) => {
+        if (c.userData.hotspotId) return;
         const m = (c as Mesh).material as MeshStandardMaterial | undefined;
-        m?.emissive?.setHex(hex);
+        m?.emissive?.setHex(hex).multiplyScalar(k);
       });
     }
+    for (const [id, m] of st.markers) {
+      (m.material as MeshBasicMaterial).color.setHex(st.hovered === id || focusedId === id ? HOTSPOT_COLOR.active : HOTSPOT_COLOR.idle);
+    }
+    drawLabel(st.hovered && st.markers.has(st.hovered) ? st.hovered : focusedId && st.markers.has(focusedId) ? focusedId : null);
     invalidate();
+  };
+
+  /** Runs refresh every frame while a hint pulse is live; the demand frameloop is otherwise idle. */
+  const pulseLoop = () => {
+    refresh();
+    if (st.pulse.size) requestAnimationFrame(pulseLoop);
+  };
+
+  /** The hotspot label: one DOM element over the marker's projected position. */
+  const drawLabel = (hotspotId: string | null) => {
+    const el = props.labelEl.current;
+    if (!el) return;
+    const m = hotspotId ? st.markers.get(hotspotId) : undefined;
+    if (!m || !isVisible(m)) return void (el.style.display = "none");
+    const p = m.getWorldPosition(new Vector3()).project(camera);
+    const { width, height } = live.current.size;
+    el.textContent = nameOf(hotspotId!);
+    el.style.display = "block";
+    el.style.transform = `translate(${((p.x + 1) / 2) * width + 14}px, ${((1 - p.y) / 2) * height - 12}px)`;
+  };
+
+  const placeCamera = () => {
+    const [x, y, z] = cameraPosition(st.cam);
+    camera.position.set(x, y + VIEW_LIFT, z);
+    camera.lookAt(0, VIEW_LIFT, 0);
+    refresh();
+  };
+
+  /** Tween the orbit pose (0 ms under reduced motion); a new tween or an orbit drag cancels it. */
+  const tweenCamera = (to: CameraPose) => {
+    const token = ++st.camTween;
+    const from = { ...st.cam };
+    const ms = live.current.props.reducedMotion ? 0 : CAMERA_TWEEN_MS;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      if (token !== st.camTween) return;
+      const k = ms <= 0 ? 1 : Math.min(1, (now - t0) / ms);
+      st.cam = lerpPose(from, to, 1 - (1 - k) ** 3);
+      placeCamera();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    step(t0);
+  };
+
+  /**
+   * Turn to the side a hotspot sits on (marker minus its part's origin, so a detached part shows the same
+   * face as an assembled one). A component turns to its first hotspot; one without a hotspot keeps the view.
+   */
+  const cameraTo = (target: string) => {
+    const hsId = st.markers.has(target) ? target : manifest.hotspots.find((h) => h.componentId === target)?.id;
+    const m = hsId ? st.markers.get(hsId) : undefined;
+    if (!m?.parent) return void (st.objects.has(target) || console.warn(`cameraTo: unknown target ${target}`));
+    const face = m.getWorldPosition(new Vector3()).sub(m.parent.getWorldPosition(new Vector3()));
+    tweenCamera(poseFacing(face.toArray(), st.cam.distance));
   };
 
   const emit = (e: SceneEvent) => {
@@ -320,7 +515,13 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     const { width, height } = live.current.size;
     el.style.display = "block";
     el.style.transform = `translate(${((ndc.x + 1) / 2) * width}px, ${((1 - ndc.y) / 2) * height}px)`;
-    el.style.borderColor = st.grab ? "#e53e3e" : "#f7fafc";
+    el.style.borderColor = st.grab ? tokens.sceneDom.cursorGrab : tokens.sceneDom.ink;
+  };
+
+  /** Dwell progress 0..1 as a fill inside the cursor ring (DOM only, no React state). */
+  const drawDwell = (k: number) => {
+    const el = props.cursorEl.current;
+    if (el) el.style.background = k > 0 ? `conic-gradient(${tokens.sceneDom.dwellFill} ${k * 360}deg, ${tokens.sceneDom.cursorFill} 0)` : tokens.sceneDom.cursorFill;
   };
 
   const handle = (e: InteractionEvent, space: CursorSpace = "camera", ndcOverride?: Ndc) => {
@@ -342,12 +543,30 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     };
 
     if (e.type === "cursor" || e.type === "hover") {
-      if (st.grab) return;
-      const hit = st.raycaster.hit(toNdc(e.cursor), camera, [...st.objects.values()]);
+      if (st.grab || st.orbit) return void toNdc(e.cursor);
+      const hit = st.raycaster.hit(toNdc(e.cursor), camera, interactables());
       const id = hit.componentId ?? hit.hotspotId;
       // Only the hand's cursor answers the vision FSM; a mouse hover must not steer the gesture grab rule.
       if (fromCamera) p.onHoverResult?.({ type: "hover_result", hoveredId: id, isGrabbable: hit.isGrabbable, t });
       updateHover(id, t);
+
+      // Dwell-select (doc 05 section 3): only the point gesture (`hover`) dwells; open palm and the mouse do not.
+      const target = e.type === "hover" ? st.hovered : null;
+      if (target !== st.dwell.id) st.dwell = { id: target, since: t, fired: false };
+      if (!target || st.dwell.fired) return void drawDwell(0);
+      const k = Math.min(1, (t - st.dwell.since) / SCENE_CONSTANTS.DWELL_SELECT_MS);
+      drawDwell(k);
+      if (k >= 1) {
+        st.dwell.fired = true;
+        drawDwell(0);
+        const isComponent = st.objects.has(target);
+        emit(
+          isComponent
+            ? { type: "select", componentId: target, method: "dwell", t }
+            : { type: "select", hotspotId: target, method: "dwell", t },
+        );
+        p.announce(`Selected ${nameOf(target)}`);
+      }
     } else if (e.type === "tracking_lost" || (e.type === "hand_count" && e.n === 0)) {
       // The held part stays exactly where it is; the worker decides between regain and a lost release.
       drawCursor(null);
@@ -355,17 +574,35 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     } else if (e.type === "tracking_regained") {
       st.rebase = true;
     } else if (e.type === "grab_start") {
-      if (p.allowGrab === false || st.grab) return;
+      st.spinOff = true;
+      if (st.grab || st.orbit) return;
       const ndc = toNdc(e.cursor);
-      const hit = st.raycaster.hit(ndc, camera, [...st.objects.values()]);
-      if (!hit.componentId) return; // empty space: orbit arrives with the full environment (Phase 4)
+      const hit = st.raycaster.hit(ndc, camera, interactables());
+      if (hit.hotspotId) {
+        emit({ type: "select", hotspotId: hit.hotspotId, method: "grab", t });
+        return p.announce(`Selected ${nameOf(hit.hotspotId)}`);
+      }
+      if (!hit.componentId) {
+        // Empty space turns the whole model (doc 05 section 3.3); the hover state clears while it turns.
+        if (p.allowOrbit === false) return;
+        st.camTween++;
+        st.orbit = { start: ndc, cam0: { ...st.cam } };
+        updateHover(null, t);
+        return;
+      }
       emit({ type: "select", componentId: hit.componentId, method: "grab", t });
-      if (!hit.isGrabbable) return;
+      // allowGrab false (introduction, explore): the pinch only selects (doc 05 section 3).
+      if (p.allowGrab === false || !hit.isGrabbable) return;
       st.grab = beginGrab(hit.componentId, st.objects.get(hit.componentId)!, ndc, camera, st.occupancy);
+      if (st.grab) drawOnTop(st.grab.object, true);
       st.hovered = hit.componentId;
       refresh();
       p.announce(`Grabbed ${nameOf(hit.componentId)}`);
     } else if (e.type === "grab_move") {
+      if (st.orbit) {
+        st.cam = orbitFrom(st.orbit.cam0, st.orbit.start, toNdc(e.cursor));
+        return placeCamera();
+      }
       if (!st.grab) return;
       const ndc = toNdc(e.cursor);
       if (st.rebase) {
@@ -373,45 +610,106 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
         st.rebase = false;
       }
       moveGrab(st.grab, ndc, camera, e.zHintDelta);
+      lightRing(nearestAcceptingSocket(st.grab.object, p.manifest.sockets, st.occupancy, camera.getWorldDirection(new Vector3()))?.id ?? null);
       invalidate();
     } else if (e.type === "grab_end") {
+      if (st.orbit) return void (st.orbit = null);
       const g = st.grab;
       if (!g) return;
       st.grab = null;
       st.rebase = false;
-      const { event, snapTo: socket } = endGrab(g, e.reason, p.manifest.sockets, st.occupancy, t);
+      drawOnTop(g.object, false);
+      lightRing(null);
+      const { event, snapTo: socket } = endGrab(g, e.reason, p.manifest.sockets, st.occupancy, t, camera.getWorldDirection(new Vector3()));
+      if (!event) {
+        refresh();
+        return p.announce(`${nameOf(g.componentId)} let go`);
+      }
       emit(event);
       syncFilled();
       if (socket) void snapTo(g.object, socket, p.reducedMotion ? 0 : SCENE_CONSTANTS.SNAP_EASE_MS, invalidate);
       refresh();
       p.announce(
-        event.type === "place" ? `${nameOf(g.componentId)} placed in ${event.socketId}` : `${nameOf(g.componentId)} dropped`,
+        event.type === "place" && !graded() ? `${nameOf(g.componentId)} placed in ${event.socketId}` : `${nameOf(g.componentId)} ${event.type === "place" ? "placed" : "dropped"}`,
       );
     }
   };
 
-  /** Back to the start pose with every socket empty (the engine's reset command, and the R key). */
-  const reset = () => {
+  /**
+   * Tween every part to a named pose: parts the pose lists leave their sockets, the rest return to the
+   * assembled transform in their rest socket. Any held part is let go without an event.
+   */
+  const setPose = (name: string) => {
     const p = live.current.props;
+    const pose = p.manifest.poses[name];
+    if (!pose) return console.warn(`setPose: no pose "${name}" in ${p.manifest.id}`);
     const ms = p.reducedMotion ? 0 : SCENE_CONSTANTS.RESET_TWEEN_MS;
+    st.pose = name;
+    if (st.grab) drawOnTop(st.grab.object, false);
+    lightRing(null);
     st.grab = null;
     st.rebase = false;
     st.hovered = null;
     for (const k of Object.keys(st.occupancy)) st.occupancy[k] = null;
     for (const [id, o] of st.objects) {
-      const tr = startPose[id] ?? st.original.get(id);
+      const tr = pose[id] ?? st.original.get(id);
       if (tr) void tweenTo(o, tr, ms, invalidate);
       const rest = p.manifest.components.find((c) => c.id === id)?.restSocketId;
-      if (!startPose[id] && rest && rest in st.occupancy) st.occupancy[rest] = id;
+      if (!pose[id] && rest && rest in st.occupancy) st.occupancy[rest] = id;
     }
     syncFilled();
     refresh();
+  };
+
+  /** Back to the activity's pose with sockets as it sets them (the engine's reset command, and the R key). */
+  const reset = () => {
+    const p = live.current.props;
+    setPose(p.pose ?? Object.keys(p.manifest.poses)[0] ?? "");
     p.announce("Scene reset");
   };
 
+  /** The worked example: pulse the part and, given a socket, tween it in, hold, and tween it back. */
+  const demonstrate = (id: string, socketId?: string) => {
+    const o = st.objects.get(id);
+    const socket = live.current.props.manifest.sockets.find((x) => x.id === socketId);
+    if (!o) return console.warn(`demonstrate: unknown component ${id}`);
+    const running = st.pulse.size > 0;
+    st.pulse.set(id, performance.now());
+    if (!running) pulseLoop();
+    if (!socket || st.grab?.componentId === id) return;
+    // Reduced motion: the part jumps in and back (no tween), so the example still shows where it goes.
+    const ms = live.current.props.reducedMotion ? 0 : DEMO_TWEEN_MS;
+    const back = { position: o.position.toArray(), rotation: [o.rotation.x, o.rotation.y, o.rotation.z] } as Transform;
+    void tweenTo(o, socket.transform, ms, invalidate)
+      .then(() => new Promise((r) => setTimeout(r, DEMO_HOLD_MS)))
+      .then(() => tweenTo(o, back, ms, invalidate));
+  };
+
+  /** X: the exploded view, and back to the activity's pose. */
+  const toggleExplode = () => {
+    const p = live.current.props;
+    if (!p.manifest.poses.exploded || p.studyParity) return; // keyboard-only: off in study sessions, like dolly
+    const back = p.pose && p.pose !== "exploded" ? p.pose : "assembled";
+    setPose(st.pose === "exploded" ? back : "exploded");
+    p.announce(st.pose === "exploded" ? "Exploded view" : "Assembled view");
+  };
+
+  const dollyBy = (factor: number) => {
+    if (live.current.props.studyParity) return;
+    st.camTween++;
+    st.spinOff = true;
+    st.cam = dolly(st.cam, factor);
+    placeCamera();
+  };
+  props.wheelHandler.current = (ev) => dollyBy(ev.deltaY > 0 ? DOLLY_STEP : 1 / DOLLY_STEP);
+
   // Keyboard equivalents (doc 05 section 7): synthesize the same events at the focused part's screen position.
   props.keyHandler.current = (ev) => {
-    if ((KEY_MAP.reset as readonly string[]).includes(ev.key)) return reset();
+    const is = (action: keyof typeof KEY_MAP) => (KEY_MAP[action] as readonly string[]).includes(ev.key);
+    if (is("reset")) return reset();
+    if (is("explode")) return toggleExplode();
+    if (is("dollyIn")) return dollyBy(1 / DOLLY_STEP);
+    if (is("dollyOut")) return dollyBy(DOLLY_STEP);
     const ids = focusable();
     if (ev.key === "Tab") {
       if (st.grab) return void ev.preventDefault(); // keep focus on the held part
@@ -422,13 +720,33 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
       ev.preventDefault();
       const id = ids[st.focus]!;
       const socket = Object.keys(st.occupancy).find((k) => st.occupancy[k] === id);
-      props.announce(`${nameOf(id)}${socket ? `, in ${socket}` : ""}`);
+      if (graded()) return props.announce(`Part ${st.focus + 1} of ${ids.length}`);
+      props.announce(`${nameOf(id)}${st.markers.has(id) ? ", marker" : socket ? `, in ${socket}` : ""}`);
       return;
+    }
+    const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[ev.key];
+    // Arrows with nothing held turn the model, like a drag on empty space.
+    if (dir && !st.grab) {
+      if (live.current.props.allowOrbit === false) return;
+      ev.preventDefault();
+      const step = (KEY_ORBIT_DEG * (ev.shiftKey ? SCENE_CONSTANTS.KEY_STEP_SHIFT_MULTIPLIER : 1)) / (SCENE_CONSTANTS.ORBIT_GAIN_DEG / 2);
+      st.camTween++;
+      st.spinOff = true;
+      st.cam = orbitFrom(st.cam, { x: 0, y: 0 }, { x: dir[0]! * step, y: dir[1]! * step });
+      return placeCamera();
     }
     const id = ids[st.focus];
     if (!id) return;
     const t = performance.now();
-    if ((KEY_MAP.grabToggle as readonly string[]).includes(ev.key)) {
+    // Enter selects the focused part or marker (doc 05 section 7); while a part is held it releases, like Space.
+    if (!st.grab && is("select")) {
+      ev.preventDefault();
+      emit(st.markers.has(id) ? { type: "select", hotspotId: id, method: "click", t } : { type: "select", componentId: id, method: "click", t });
+      props.announce(`Selected ${nameOf(id)}`);
+      return;
+    }
+    if (st.markers.has(id)) return; // markers select; they do not grab
+    if (is("grabToggle")) {
       ev.preventDefault();
       if (!st.grab) {
         const p = st.objects.get(id)!.position.clone().project(camera);
@@ -439,7 +757,6 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
       }
       return;
     }
-    const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[ev.key];
     if (dir && st.grab) {
       ev.preventDefault();
       const step = KEY_NDC_STEP * (ev.shiftKey ? SCENE_CONSTANTS.KEY_STEP_SHIFT_MULTIPLIER : 1);
@@ -454,7 +771,20 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
       apply(cmd) {
         if (cmd.type === "setSocketVisual") setVisualOverrides((v) => ({ ...v, [cmd.socketId]: cmd.visual }));
         else if (cmd.type === "reset") reset();
-        else if (cmd.type === "highlight" && cmd.style) {
+        else if (cmd.type === "setPose") setPose(cmd.pose);
+        else if (cmd.type === "demonstrate") demonstrate(cmd.componentId, cmd.socketId);
+        else if (cmd.type === "cameraTo") cameraTo(cmd.target);
+        else if (cmd.type === "setVisible") {
+          for (const id of cmd.ids) {
+            const o = st.objects.get(id);
+            if (o) o.visible = cmd.visible;
+          }
+          refresh();
+        } else if (cmd.type === "highlight" && !cmd.style) {
+          const running = st.pulse.size > 0;
+          for (const id of cmd.ids) st.pulse.set(id, performance.now());
+          if (!running) pulseLoop();
+        } else if (cmd.type === "highlight" && cmd.style) {
           const hex = OUTCOME_TINT[cmd.style];
           for (const id of cmd.ids) st.outcome.set(id, hex);
           refresh();
@@ -462,7 +792,7 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
             for (const id of cmd.ids) if (st.outcome.get(id) === hex) st.outcome.delete(id);
             refresh();
           }, cmd.durationMs ?? OUTCOME_TINT_MS);
-        } else applySceneCommand(cmd);
+        } else console.warn(`scene command ${cmd.type} is V1`); // playAnimation
         invalidate();
       },
       snapshot: () =>
@@ -481,6 +811,48 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Turntable (introduction). One rAF loop renders every frame while it turns, like a drag does; it ends when the
+  // learner takes over. Leaving the activity untouched tweens back to the default view for the next one.
+  useEffect(() => {
+    if (!props.autoRotate || props.reducedMotion) return;
+    st.spinOff = false;
+    let last = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      if (st.spinOff) return;
+      if (!st.orbit && !st.grab) {
+        st.cam = { ...st.cam, azimuth: st.cam.azimuth + ((now - last) / 1000) * SPIN_DEG_PER_S };
+        placeCamera();
+        invalidate();
+      }
+      last = now;
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(raf);
+      // The default view nearest the current angle, so the tween turns less than half a revolution.
+      const d = manifest.defaultCamera.azimuth;
+      if (!st.spinOff) tweenCamera({ ...manifest.defaultCamera, azimuth: d + Math.round((st.cam.azimuth - d) / 360) * 360 });
+      st.spinOff = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.autoRotate, props.reducedMotion]);
+
+  // Activity changes: a new pose prop tweens there (the first pose is applied at registration).
+  useEffect(() => {
+    if (model && props.pose && props.pose !== st.pose) setPose(props.pose);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.pose, model]);
+
+  // The activity's visible set; runs after the components register (child effects run first).
+  useEffect(() => {
+    const only = props.visibleComponents;
+    for (const [id, o] of st.objects) o.visible = !only || only.includes(id);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.visibleComponents, model]);
+
   return (
     <>
       {manifest.components.map((c) => (
@@ -489,8 +861,12 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
       {manifest.sockets
         .filter((x) => !filled.has(x.id))
         .map((x) => (
-          <SocketMarker key={x.id} socket={x} visual={visualOverrides[x.id] ?? socketVisual ?? x.visual} />
+          <SocketMarker key={x.id} socket={x} visual={visualOverrides[x.id] ?? socketVisual ?? x.visual} register={registerRing} />
         ))}
+      {props.showHotspots !== false && manifest.hotspots.map((h) => {
+        const node = model?.nodes.get(h.componentId);
+        return node && <Hotspot key={h.id} hotspot={h} node={node} register={registerMarker} />;
+      })}
       {model?.scenery.map((o) => <primitive key={o.uuid} object={o} />)}
     </>
   );

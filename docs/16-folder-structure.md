@@ -62,11 +62,11 @@ grasp/
 │       │   ├── dev/
 │       │   │   └── model/[id]/page.tsx            # content review page; excluded from production builds
 │       │   ├── api/
-│       │   │   ├── session/route.ts               # POST mint session
-│       │   │   ├── session/[id]/route.ts          # GET resolve code, DELETE withdraw
+│       │   │   ├── session/route.ts               # POST create or resume session (doc 03)
+│       │   │   ├── session/[id]/route.ts          # GET resolve code (501 until the retention page), DELETE withdraw
 │       │   │   ├── tutor/route.ts                 # TutorService: template engine (MVP), local model (V1)
 │       │   │   ├── attempts/route.ts
-│       │   │   ├── progress/route.ts
+│       │   │   ├── progress/route.ts              # PUT /api/progress (V1)
 │       │   │   └── events/route.ts                # research log ingest
 │       │   ├── layout.tsx
 │       │   └── page.tsx
@@ -75,13 +75,13 @@ grasp/
 │       │   ├── screens/                # consent, calibration, test forms, mastery summary
 │       │   └── providers/              # input-source switch (gesture or mouse), store providers
 │       ├── stores/                     # session-store.ts, lesson-store.ts, scene-store.ts (Zustand)
-│       ├── lib/                        # api-client.ts, logger-transport.ts, env.ts, csp.ts
+│       ├── lib/                        # api-client.ts, logger-transport.ts, db.ts (route-handler client, cookie guard, 503), env.ts, csp.ts
 │       ├── public/
 │       │   ├── mediapipe/              # hand_landmarker.task + wasm, pinned version, self-hosted
 │       │   ├── draco/                  # decoder files for Drei useGLTF
 │       │   └── models/                 # GLBs served from here in MVP; object storage + CDN at V1
 │       ├── e2e/                        # Playwright smoke tests (V1)
-│       ├── middleware.ts               # CSP and security headers
+│       ├── proxy.ts                    # CSP and security headers (Next.js 16 name for middleware)
 │       ├── next.config.ts
 │       └── package.json
 ├── packages/
@@ -108,7 +108,7 @@ grasp/
 │   ├── content/                        # scaffold-manifest.ts, validate.ts, hash.ts
 │   ├── models/                         # optimize.sh (gltf-transform pipeline), upload.ts
 │   ├── research/                       # metrics.ts (per-session metrics), export-session.ts
-│   └── db/                             # migrate.ts, seed-dev.ts
+│   └── db/                             # seed-dev.ts (`pnpm db:seed`); migrations are not here: `pnpm db:migrate` runs drizzle-kit in packages/db
 ├── services/
 │   └── README.md                       # empty seam for a V1/Future Python service
 ├── infrastructure/
@@ -144,12 +144,12 @@ grasp/
 | `packages/learning/` | Deterministic engine | **MVP** | `evaluate()`, mastery, activity sequencing, hint ladder, time cap, `LogEvent` buffer; isomorphic so route handlers and `scripts/research` can import it | DOM, React, Three.js, MediaPipe imports; `fetch` (transport is in `apps/web/lib`) |
 | `packages/tutor/` | Tutor seam | **MVP** | `TutorService` interface, `TemplateTutorService` (deterministic templates over the hint ladder and manifest `description`, `relations`, `tags`), `TutorResponse` Zod validation, static fallback, `LocalTutorService` stub (**V1**, Ollama or WebLLM after measurement), `RemoteTutorService` stub (Python seam) | Any hosted LLM client or vendor SDK (excluded by rule); network calls in MVP; model names or prices |
 | `packages/ui/` | Design primitives | **MVP** | `tokens.ts` consumed by Tailwind and the scene, Radix wrappers, focus ring, ARIA live region | Screens or HUD layouts; anything lesson-specific |
-| `packages/db/` | Persistence schema | **MVP** | Drizzle tables for `research_sessions`, `lesson_attempts`, `progress`, `event_logs`, `instrument_responses`, `consent_records`, `ai_interactions`; migrations; client factory for Neon or `postgres.js` | Queries embedded in React components; the **V1** content tables until doc 10's trigger fires |
+| `packages/db/` | Persistence schema | **MVP** | Drizzle tables for `research_sessions`, `lesson_attempts`, `progress` (**V1**, behind a comment block), `event_logs`, `instrument_responses`, `consent_records`, `ai_interactions`; migrations (`migrations/0000_init.sql`, generated and committed; `pnpm db:migrate`); `createDb` client factory over `postgres.js` for local and Neon; re-exports the Drizzle query operators so the app loads one `drizzle-orm` instance | Queries embedded in React components; the **V1** content tables until doc 10's trigger fires |
 | `content/models/`, `content/lessons/` | Pedagogical content | **MVP** | Manifests and lessons with immutable versioned ids | Executable code; anatomy-specific fields (the schema is subject-neutral) |
 | `content/instruments/` | Study instruments | **MVP** | Knowledge forms A/B/C, SUS, TLX item text as JSON | Participant responses (those are rows in `instrument_responses`) |
 | `content/source/` | Blender sources | **MVP** | `.blend` files | Anything the build reads |
 | `models/` | Compressed GLB outputs | **MVP** | `models/<modelId>/<file>.glb`, path identical to the object-storage key | Raw exports; files over 5 MB (the validator rejects them) |
-| `scripts/` | Authoring and research pipeline | **MVP** | gltf-transform wrapper, manifest scaffold, validator, content hash, GLB upload, per-session metrics, session export, migrations | Anything the app imports at runtime |
+| `scripts/` | Authoring and research pipeline | **MVP** | gltf-transform wrapper, manifest scaffold, validator, content hash, GLB upload, per-session metrics, session export, dev seed | Anything the app imports at runtime |
 | `services/` | Attachment point for a Python service | **V1/Future** | A README only | Any code in MVP |
 | `infrastructure/` | Local and hosting config | **MVP** | `docker-compose.yml` (Postgres 16, one volume), `vercel.json` | Production containers, orchestration, secrets |
 | `docs/` | This document set | **MVP** | Twenty files per the index | Generated API docs |
@@ -202,7 +202,7 @@ flowchart TD
 | No package imports `apps/web` | Packages are libraries; the app composes them | **MVP** |
 | Only `apps/web/lib` and `scripts/` call the network or the database | One place to audit for what leaves the device | **MVP** |
 
-The Web Worker is created in `apps/web` with `new Worker(new URL("@grasp/vision/worker", import.meta.url), { type: "module" })`, which Next.js bundles as a separate chunk. MediaPipe loads its WASM and `.task` from `/mediapipe/` on the same origin, so the CSP in `middleware.ts` needs `worker-src 'self'` and `script-src 'self' 'wasm-unsafe-eval'` and nothing from third-party hosts (details in [Security and Privacy](15-risks-security-scalability.md#security-and-privacy)).
+The Web Worker is created in `apps/web` with `new Worker(new URL("@grasp/vision/worker", import.meta.url), { type: "module" })`, which Next.js bundles as a separate chunk. MediaPipe loads its WASM and `.task` from `/mediapipe/` on the same origin, so the CSP in `proxy.ts` needs `worker-src 'self'` and `script-src 'self' 'wasm-unsafe-eval'` and nothing from third-party hosts (details in [Security and Privacy](15-risks-security-scalability.md#security-and-privacy)).
 
 ## The `services/` seam
 
@@ -228,7 +228,7 @@ From `project-conventions`, applied to paths and identifiers in this tree.
 | TypeScript files | `kebab-case.ts`, `.tsx` for components | `drag-plane.ts`, `hint-card.tsx` |
 | TypeScript types and React components | `PascalCase` | `SceneState`, `LessonScene` |
 | Route segments | `kebab-case`; dynamic segments in brackets | `app/api/session/[id]/route.ts` |
-| Component, socket, hotspot ids | `snake_case`, anatomical | `left_ventricle`, `socket_aorta`, `hs_septum` |
+| Component, socket, hotspot ids | `snake_case`, anatomical | `left_ventricle`, `socket_aorta`, `hs_lv_wall` |
 | Gesture names and task types | `snake_case` | `pinch_drag`, `identify` |
 | Lesson and model ids | dotted lowercase with version suffix | `anatomy.heart.chambers_v1`, `heart_v1` |
 | Content file paths | mirror the id | `content/lessons/anatomy/heart/chambers_v1.json` |

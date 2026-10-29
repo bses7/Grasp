@@ -98,7 +98,7 @@ The brief's philosophy maps one-to-one onto activity kinds in the `lesson-schema
 | Philosophy stage | Activity kind | What the learner does | Mechanism | Evidence captured | Tier |
 |---|---|---|---|---|---|
 | Learn by seeing | `introduction` | Reads three narration cards; orbits the assembled heart with `pinch_drag` on empty space | Dual coding; orientation | `activity_start`, `activity_end`, orbit count | **MVP** |
-| Interact by doing | `explore` | Hovers with `point`; reads hotspots `hs_lv_wall`, `hs_septum` | Dual coding; pre-training of names before tasks | Hotspots viewed | **MVP** |
+| Interact by doing | `explore` | Hovers with `point`; reads hotspots such as `hs_lv_wall`, `hs_rv` | Dual coding; pre-training of names before tasks | Hotspots viewed | **MVP** |
 | Experiment | `guided` | `identify` and `place` with ghost sockets and hints | Worked example, faded guidance | `task_attempt` with outcome, hints used | **MVP** |
 | Receive feedback | every task | Sees correct, partial, or incorrect at the object, with expected versus actual | Immediate, action-level feedback | `task_attempt.feedback` | **MVP** |
 | Understand | `challenge`, tutor | Reassembles from the exploded pose; orders the blood path; may press "Explain" to have the tutor explain the last wrong attempt | Generative learning; self-explanation | `task_attempt`, `tutor_message` | **MVP** (tutor flag-gated) |
@@ -133,8 +133,8 @@ Learner: first-year nursing student, gesture condition, laptop with 720p webcam,
 | Time | Activity | What happens | Scene events | Engine result |
 |---|---|---|---|---|
 | 0:00 | Pre-lesson | Consent screen; camera preview with tracking indicator; 5-minute calibration tutorial (open palm, point, pinch a practice cube into a ring) | `hand_count`, `perf_sample` | None |
-| 0:00 | `act_intro` | Three narration cards. Learner orbits with `pinch_drag` on empty space. Completion after 20 s | `activity_start`, `activity_end` | None |
-| 0:20 | `act_explore` | Learner hovers `point` over `left_ventricle`; `hs_lv_wall` label appears; reads "about three times thicker". Hovers `septum`, reads `hs_septum`. Completion at 60 s | `select` on two hotspots | None |
+| 0:00 | `act_intro` | Three narration cards. Learner orbits with `pinch_drag` on empty space. Ends when the learner presses "Continue →" | `activity_start`, `activity_end` | None |
+| 0:20 | `act_explore` | Learner hovers `point` over `left_ventricle`; `hs_lv_wall` label appears; reads "about three times thicker". Points at `right_ventricle`, reads `hs_rv`. Ends when the learner presses "Start the lesson →" | `select` on two hotspots | None |
 | 1:20 | `act_guided` t_g1 `identify` "Point to the left ventricle" | Learner dwells on `right_ventricle` (learner's left, a common mirror error) | `select right_ventricle` | Incorrect. Hint 1: "It is one of the two lower chambers." `hintsUsed = 1` |
 | 1:45 | t_g1 attempt 2 | Learner dwells on `left_ventricle` | `select left_ventricle` | Correct. Score 10 − 1×2 = 8 |
 | 2:00 | t_g2 `identify` "Point to the right atrium" | Correct first time | `select right_atrium` | Correct, 10 |

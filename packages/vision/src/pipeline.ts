@@ -20,6 +20,8 @@ export type PipelineOutput = {
   readonly jitter: number | null;
   /** For the developer fixture recorder only; never logged. */
   readonly features: GestureFeatures | null;
+  /** Raw landmarks of every tracked hand this frame, for the camera preview overlay only; never logged or stored. */
+  readonly hands: HandLandmarks[];
 };
 
 /** Luminance is sampled every Nth frame; a GPU readback per frame is not worth it for a 2 s rule. */
@@ -99,7 +101,7 @@ export class VisionPipeline {
       t,
     );
     if (s) messages.push(s);
-    return { messages, inferenceMs, jitter, features };
+    return { messages, inferenceMs, jitter, features, hands: hands.map((h) => h.l) };
   }
 
   onHoverResult(r: HoverResult): void {

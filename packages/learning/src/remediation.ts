@@ -1,4 +1,4 @@
-import type { Activity, Task } from "@grasp/types";
+import type { Activity, AttemptState, Task } from "@grasp/types";
 
 /**
  * Repeated-failure policy, failure state 7 (docs/02, docs/06 "Repeated-failure policy").
@@ -30,19 +30,41 @@ export function shouldRemediate(
   maxAttempts: number,
   alreadyRemediated: boolean,
 ): boolean {
-  void activityKind;
-  void attemptsMade;
-  void maxAttempts;
-  void alreadyRemediated;
-  throw new Error("TODO Phase D: shouldRemediate (doc 06, doc 13 Phase 4)");
+  return (activityKind === "guided" || activityKind === "challenge") && attemptsMade >= maxAttempts && !alreadyRemediated;
 }
+
+/** Component id as words for a synthesised prompt ("left_ventricle" -> "left ventricle"). */
+const words = (id: string) => id.replace(/_/g, " ");
 
 /**
  * Synthesise the prerequisite micro-task from the failed task's `expect`.
  * Not stored as content; `task.remediation` (V1) will override it when present.
- * Phase D (M8).
+ * Always an `identify` (one Bloom step down), one attempt, scored 0, id `<task.id>__micro`.
+ * `state` supplies a sequence task's collected steps, to find the first wrong one.
  */
-export function synthesiseMicroTask(task: Task): Task {
-  void task;
-  throw new Error("TODO Phase D: synthesiseMicroTask (doc 06, doc 13 Phase 4)");
+export function synthesiseMicroTask(task: Task, state?: AttemptState): Task {
+  const base = { id: `${task.id}__micro`, objectiveId: task.objectiveId, maxAttempts: 1, scoring: { correct: 0 } };
+  const identify = (componentId: string | string[], prompt: string, hints: Task["hints"] = []): Task => ({
+    ...base,
+    type: "identify",
+    prompt,
+    hints,
+    expect: { componentId },
+  });
+  switch (task.type) {
+    case "place":
+    case "remove":
+      return identify(task.expect.componentId, `First, point to the ${words(task.expect.componentId)}.`);
+    case "sequence": {
+      const steps = state?.steps ?? [];
+      const wrong = task.expect.steps.find((s, i) => steps[i]?.componentId !== s.componentId) ?? task.expect.steps[0]!;
+      return identify(wrong.componentId, `First, point to the ${words(wrong.componentId)}.`);
+    }
+    case "compare":
+      // ponytail: one identify accepting either candidate, not one per candidate; split it if pilots show the need.
+      return identify([...task.expect.componentIds], `First, point to the ${task.expect.componentIds.map(words).join(" or the ")}.`);
+    case "identify":
+      // Same task with the level-3 reveal applied from the start.
+      return identify(task.expect.componentId, task.prompt, task.hints.filter((h) => h.level === 3));
+  }
 }

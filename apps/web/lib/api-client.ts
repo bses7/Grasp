@@ -1,38 +1,73 @@
 /**
- * Typed browser-side clients for the route handlers in app/api (docs/03,
- * "Backend modules"). This file and lib/logger-transport.ts are the only
- * client code that calls the network (docs/16, package boundaries).
- *
- * Payload types are `unknown` until @grasp/types lands the Zod-derived
- * request shapes (TutorRequest, AttemptRow, LogEvent).
- *
- * TODO Phase D, doc 13 Phase 4-5: implement with fetch against same origin,
- * sending the sessionId from sessionStore and reading the httpOnly cookie
- * server-side; reject on non-2xx with the route's error body.
+ * Typed browser-side clients for the route handlers in app/api (doc 03 "Backend modules"). This file and
+ * lib/logger-transport.ts are the only client code that calls the network (doc 16, package boundaries).
+ * Same origin only; the httpOnly session cookie travels with every request.
  */
-const NOT_IMPLEMENTED = "api-client: not implemented (Phase D)";
+import type { AttemptRecord, StudyCondition } from "@grasp/types";
 
-export async function createSession(_payload: unknown): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+export type SessionInfo = {
+  sessionId: string;
+  resumed: boolean;
+  condition: StudyCondition;
+  /** `dev` sessions (developer codes DG, DM) may "Try again" after the results. */
+  studyPhase: "pilot" | "main" | "dev";
+  /** The participant agreed to the event log; without it the logger drops every event. */
+  consentLogging: boolean;
+  participantCode: string | null;
+  lessonHash: string;
+  /** The lesson or manifest changed since this session started; its attempts may not match the content. */
+  contentChanged: boolean;
+  /** ms since the session started on the server's clock, so a resumed log keeps one time base. */
+  elapsedMs: number;
+  nextSeq: number;
+  attempts: AttemptRecord[];
+  skipped: string[];
+};
+
+/** A failed request; `status` lets callers tell "no consented session" (404) or "code used" (409) from an outage. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
-export async function resolveSessionCode(_code: string): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+async function ok(res: Response): Promise<Response> {
+  if (!res.ok) throw new ApiError(res.status, `${res.url}: ${res.status} ${await res.text().catch(() => "")}`);
+  return res;
 }
 
-export async function withdrawSession(_sessionId: string): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+/**
+ * Create the session from the consent form (with the researcher's code and the consent given), or resume the
+ * consented session for this lesson and condition (POST /api/session; 404 when there is none).
+ */
+export async function createSession(
+  body:
+    | { sessionId: string; lessonId: string; condition: StudyCondition }
+    | { sessionId: string; lessonId: string; assignmentCode: string; consent: { version: string; logging: boolean } },
+): Promise<SessionInfo> {
+  const res = await fetch("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return (await ok(res)).json() as Promise<SessionInfo>;
 }
 
-export async function requestTutor(_request: unknown): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+/** Persist attempts; `id` makes a retry idempotent (POST /api/attempts). */
+export async function postAttempts(attempts: (AttemptRecord & { id: string })[]): Promise<void> {
+  await ok(await fetch("/api/attempts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ attempts }) }));
 }
 
-export async function postAttempt(_attempt: unknown): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+/** "Try again" for a dev session: a fresh session with the same consent; the cookie moves to it. */
+export async function restartSession(sessionId: string): Promise<{ sessionId: string }> {
+  return (await ok(await fetch(`/api/session/${sessionId}/restart`, { method: "POST" }))).json() as Promise<{ sessionId: string }>;
 }
 
-/** V1: MVP recomputes mastery from lesson_attempts; no progress upsert. */
-export async function putProgress(_progress: unknown): Promise<never> {
-  throw new Error(NOT_IMPLEMENTED);
+/** Lesson progress that is not an attempt (PATCH /api/session/:id); keepalive so a skip right before a reload lands. */
+export async function updateSession(sessionId: string, body: { skip: string } | { ended: true }): Promise<void> {
+  await ok(await fetch(`/api/session/${sessionId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true }));
+}
+
+/** Withdraw: delete the session and everything under it (DELETE /api/session/:id). */
+export async function withdrawSession(sessionId: string): Promise<void> {
+  await ok(await fetch(`/api/session/${sessionId}`, { method: "DELETE" }));
 }

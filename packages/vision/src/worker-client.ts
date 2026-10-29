@@ -11,6 +11,7 @@
 import type { CvStatus, HoverResult, InteractionEvent, PerfSample } from "@grasp/types";
 import { VISION_CONSTANTS } from "./constants";
 import type { GestureFeatures } from "./gesture-fsm";
+import type { HandLandmarks } from "./landmarks";
 import type { LandmarkerDelegate } from "./landmarker";
 import { VisionPipeline, type PipelineOutput } from "./pipeline";
 import type { WorkerInbound, WorkerOutbound } from "./worker/hand-landmarker.worker";
@@ -22,7 +23,9 @@ export type VisionMessage =
   | InteractionEvent
   | CvStatus
   | PerfSample
-  | { readonly type: "features"; readonly t: number; readonly f: GestureFeatures | null };
+  | { readonly type: "features"; readonly t: number; readonly f: GestureFeatures | null }
+  /** Only with `showHands`: this frame's landmarks for the preview overlay. Draw and drop; never log or store. */
+  | { readonly type: "hands"; readonly hands: HandLandmarks[] };
 
 export type StartVisionOptions = {
   /** A playing camera <video> (see openCamera). */
@@ -32,6 +35,8 @@ export type StartVisionOptions = {
   readonly forceMainThread?: boolean;
   /** Developer fixture recorder only. */
   readonly debugFeatures?: boolean;
+  /** Post `hands` messages for the camera preview's landmark overlay. */
+  readonly showHands?: boolean;
 };
 
 export type VisionHandle = {
@@ -183,7 +188,7 @@ function startWorker(opts: StartVisionOptions, onFrame: (s: FrameStats) => void)
         opts.onMessage(m);
       }
     };
-    send({ type: "init", debugFeatures: opts.debugFeatures });
+    send({ type: "init", debugFeatures: opts.debugFeatures, showHands: opts.showHands });
   });
 }
 
@@ -193,6 +198,7 @@ async function startMainThread(opts: StartVisionOptions, onFrame: (s: FrameStats
   const deliver = (out: PipelineOutput, t: number) => {
     for (const m of out.messages) opts.onMessage(m);
     if (opts.debugFeatures) opts.onMessage({ type: "features", t, f: out.features });
+    if (opts.showHands) opts.onMessage({ type: "hands", hands: out.hands });
     onFrame({ t, inferenceMs: out.inferenceMs, jitter: out.jitter });
   };
   return {

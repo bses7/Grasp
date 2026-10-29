@@ -37,8 +37,9 @@ const HOLD: Record<GestureCandidate, number> = {
 };
 
 /**
- * M3 scope (doc 17): NO_HAND, IDLE, GRABBING, DRAGGING, LOST. `point` is classified but HOVER is
- * not entered until M6 wires the raycast; until then a pointing hand emits the neutral `cursor` event.
+ * The full doc 04 state machine: NO_HAND, IDLE (open_palm or an unclassified hand: neutral `cursor`
+ * events), HOVER (point: `hover` events, which the scene turns into dwell-select), GRABBING, DRAGGING, LOST.
+ * Phase 4 step 4.0 added HOVER; M3 to M11 ran without it.
  */
 export class GestureFsm {
   state: GestureState = "NO_HAND";
@@ -147,7 +148,10 @@ export class GestureFsm {
         }
         if (grab === "refuse") this.pinchRejected = true;
       }
-      out.push({ type: "cursor", cursor: f.cursor, ...meta });
+      // point held HOLD frames enters HOVER; open_palm or unknown held HOLD frames returns to IDLE.
+      if (confirmed && candidate === "point") this.state = "HOVER";
+      else if (confirmed && (candidate === "open_palm" || candidate === "unknown")) this.state = "IDLE";
+      out.push({ type: this.state === "HOVER" ? "hover" : "cursor", cursor: f.cursor, ...meta });
       return;
     }
 

@@ -53,8 +53,8 @@ The heart lesson `anatomy.heart.chambers_v1` (full JSON in `lesson-schema/refere
 
 ```text
 anatomy.heart.chambers_v1  (model heart_v1, 12 min, difficulty 1)
- ├── act_intro      introduction  assembled pose, orbit only, 3 narration cards, completion time ≥ 20 s
- ├── act_explore    explore       hotspots hs_lv_wall, hs_septum; no tasks; completion time ≥ 60 s
+ ├── act_intro      introduction  assembled pose, orbit only, 3 narration cards; no tasks; completion { continue: true } ("Continue →")
+ ├── act_explore    explore       hotspots hs_lv_wall, hs_rv, hs_la, hs_ra, hs_aorta, hs_pa; no tasks; completion { continue: true } ("Start the lesson →")
  ├── act_guided     guided        sockets visible (ghost), grab on, 3 attempts, hints 1-3
  │     t_g1 identify left_ventricle        obj_identify_chambers
  │     t_g2 identify right_atrium          obj_identify_chambers   (level-2 hint is tutor: true)
@@ -68,6 +68,19 @@ anatomy.heart.chambers_v1  (model heart_v1, 12 min, difficulty 1)
 ```
 
 Each activity kind has one pedagogical job: introduction activates prior knowledge, explore builds a spatial model without grading, guided is worked practice with faded support, challenge is independent practice in a harder pose, assessment is the evidence that feeds mastery most heavily, and mastery closes the loop with feedback on objectives rather than tasks.
+
+### Activity completion rules
+
+`activity.completion` decides when the engine leaves an activity. `isActivityComplete` (`packages/learning/src/sequencing.ts`) implements the first three; the fourth is never satisfied by the engine on its own.
+
+| `completion` | Activity ends when | Used for | Tier |
+|---|---|---|---|
+| `{ allTasks: true }` | every task is correct, marked failed, or skipped | guided, challenge, assessment, mastery | **MVP** |
+| `{ minCorrect: n }` | at least `n` tasks are correct | optional shorter practice sets | **MVP** |
+| `{ time: s }` | `s` seconds have elapsed in the activity | task-less activities that must not wait on the learner; unused in `chambers_v1` | **MVP** |
+| `{ continue: true }` | the learner presses the Continue button; `TaskRunner.proceed(t)` advances, and only a task-less activity with this rule | introduction and explore in `chambers_v1` | **MVP** |
+
+User decision 2026-10-29: the learner starts the lesson when ready, with no timer. `chambers_v1` replaced `{ time: 20 }` and `{ time: 60 }` on introduction and explore with `{ continue: true }`. The lesson page shows a large side button, clear of the model, labelled "Continue →" in the introduction and "Start the lesson →" in explore, operable by hand dwell, pinch, or mouse. Pedagogical reason: a timer either cuts orientation and exploration short for a slow reader or makes a fast learner wait, and neither serves an objective. Limitation: a learner can skip exploration in one click. Explore is ungraded, so this costs no evidence, and its duration (`activity_start` to `activity_end` in the event log) becomes a process measure instead of a fixed constant ([14](14-evaluation-methodology.md)).
 
 ## Objectives and the objective-to-3D-action mapping
 
@@ -165,16 +178,16 @@ Feedback is formative, immediate, and split into a deterministic part and an opt
 
 | Outcome | Scene response (within 200 ms) | HUD text | Tutor involvement | Mastery effect |
 |---|---|---|---|---|
-| `correct` | snap to socket or confirm highlight | prompt turns green; one-line fact from component `description` | none by default | latest score recorded |
+| `correct` | snap to socket or confirm highlight | correct headline with icon (wording, colour, and motion per the [feedback vocabulary](11-ui-ux.md#feedback-vocabulary)); one-line fact from component `description` | none by default | latest score recorded |
 | `partial` | stays snapped in the wrong socket, flagged by HUD; learner re-grabs to retry | "Right part, wrong place" | optional explanation of why the socket is wrong | `scoring.partial` |
-| `incorrect` | `place`: stays snapped, flagged by HUD; learner re-grabs to retry. `identify`/`compare`: selected component flashes | "That was the {actual.name}" | level-2 hint if `tutor: true`, else static | 0 until a later attempt |
-| exhausted | worked example plays (below) | "Watch, then try again" | optional short explanation | retry score counts, with `hintsUsed = 3` |
+| `incorrect` | `place`: stays snapped, flagged by HUD; learner re-grabs to retry. `identify`/`compare`: selected component flashes | names the wrong part and the target; copy per [02 wrong object](02-learning-experience.md#the-learner-interacts-with-the-wrong-object) | level-2 hint if `tutor: true`, else static | 0 until a later attempt |
+| exhausted | worked example plays (below) | introduces the worked example; copy per [02 repeated failure](02-learning-experience.md#the-learner-repeatedly-fails-a-task) | optional short explanation | retry score counts, with `hintsUsed = 3` |
 
 The deterministic part never waits on the tutor. In MVP the explanatory part is composed by `TemplateTutorService` from the same feedback object in the same frame; if the service throws or its output fails validation, the HUD keeps the static text and hint ([07 failure handling](07-ai-tutor.md#latency-and-failure-handling)). In **V1** a local-model phrasing may replace the template text on arrival; it never blocks the lesson.
 
 ## Progress, mastery, and the separation from XP
 
-**Progress** is the activity cursor plus every attempt record for this lesson. It is resumable: reloading the page restores the current activity and task from the attempt log.
+**Progress** is the activity cursor plus every attempt record for this lesson. It is resumable: after a reload, `POST /api/session` returns the session's `lesson_attempts` rows and the runner is rebuilt with `TaskRunner.resume`. It opens at the activity of the last attempt, with attempts and the revealed hint level restored; a reload between remediation and its micro-task counts the micro-task as done; skipped tasks are restored from `research_sessions.skipped_task_ids` (written by `PATCH /api/session/:id`, independent of logging consent) ([persistence](#runtime-position-and-persistence)).
 
 **Mastery** per objective follows the `lesson-schema` rule, with the normalisation made explicit:
 
@@ -191,6 +204,8 @@ unlock(lesson)      = every objective of every lesson in lesson.prerequisites is
 ```
 
 Tasks without an attempt are excluded rather than scored 0, so abandoning a lesson mid-way shows "not started" for untouched objectives instead of a false low mastery. Hint penalties reduce guided and challenge scores slightly, but the 2× assessment weight ensures the unaided attempt dominates.
+
+The results screen shows mastery per objective and a Review list of tasks not answered correctly. There is no retake for pilot or main-study participants: a second pass would add practice the other condition did not get and contaminate the post-lesson measures. A dev session only shows a "Try again" button, which starts a fresh session rather than reopening this one (**MVP**). A learner-facing retake that re-enters explore is **V1**.
 
 ```mermaid
 flowchart LR
@@ -225,7 +240,7 @@ onSceneEvent(event):                                   // student action
   persistAttempt(result)                                           // local first, batched to the server route
 
   if result.correct:
-    showFeedback(result.feedback)                                  // green prompt; part already snapped by the scene
+    showFeedback(result.feedback)                                  // correct headline (doc 11 feedback vocabulary); part already snapped by the scene
     state.mastery[task.objectiveId] = mastery(objective)           // recompute from attempts
     advance(task)
   else if attempts(task) < (task.maxAttempts ?? defaultFor(activity.kind)):
@@ -238,8 +253,11 @@ onSceneEvent(event):                                   // student action
   else:
     recordFailed(task); advance(task)
 
-  if activity.completion satisfied: advance(activity)
+  if activity.completion satisfied: advance(activity)            // never true for { continue: true }
   if activity.kind == "mastery": render mastery per objective; emit unlock decisions
+
+onContinue(t):                                         // the learner's Continue button
+  if activity.tasks is empty and activity.completion is { continue: true }: advance(activity)
 ```
 
 `evaluate` itself is exactly the function in the `lesson-schema` skill. `countsAsAttempt` encodes the "event that counts as an attempt" column of the task-types table plus the tracking-loss discard: a `drop` with `cause: "lost"` is dropped before any task-type logic runs. Both functions are pure, synchronous, and covered by fixture tests that replay recorded `LogEvent` streams and assert the resulting mastery.
@@ -250,11 +268,11 @@ onSceneEvent(event):                                   // student action
 |---|---|---|---|
 | Where `evaluate` runs | Browser, in the React state layer, same tick as the scene event | Browser, plus optional server replay of the event stream using the same function for tamper checks | Feedback must be sub-200 ms; a pure TS function runs anywhere |
 | Lesson JSON source | Static file bundled with the app | Fetched from the content API, cached | One lesson exists |
-| Attempt persistence | In-memory, mirrored to `localStorage` keyed by `sessionId`; batched to a Next.js route every 10 s and on `task_end` as `LogEvent[]` (`research-protocol` schema) | Same, with rows in `lesson_attempts` tied to an authenticated user | Prototype has no database (locked position 10); the research pilot needs an export |
-| Mastery persistence | Recomputed from `lesson_attempts` (or the local attempt log) on load; no `progress` table | Cached per user and objective in a `progress` table, still derived from `lesson_attempts` | Recomputation is cheap and avoids a second source of truth |
+| Attempt persistence | Each attempt is POSTed to `/api/attempts` as one `lesson_attempts` row with a client-generated `id` (idempotent insert); a failed POST is retried on the next clock tick, and any still-unsaved attempt is sent with `sendBeacon` on page close. The `task_attempt` `LogEvent` is logged separately to `event_logs` (`research-protocol` schema). Nothing is kept in `localStorage` except the `sessionId` (cookie fallback) | Same, with `lesson_attempts` rows tied to an authenticated user | The prototype had no database (locked position 10); from roadmap Phase 4 step 4.5 the research pilot needs server-side attempts and resume |
+| Mastery persistence | Recomputed from the session's `lesson_attempts` on load; no `progress` table | Cached per user and objective in a `progress` table, still derived from `lesson_attempts` | Recomputation is cheap and avoids a second source of truth |
 | What is never persisted | video, landmarks | same | locked position 2 |
 
-Attempt record fields the engine guarantees, for [09](09-database.md): `sessionId`, `lessonId`, `activityId`, `taskId`, `objectiveId`, `attemptNo`, `outcome`, `score`, `hintsUsed`, `remediated`, `durationMs`, `actual` (event summary), `t`. The server stores; it does not grade.
+Attempt record fields the engine guarantees, for [09](09-database.md): `sessionId`, `lessonId`, `activityId`, `taskId`, `objectiveId`, `attemptNo`, `outcome`, `score`, `hintsUsed`, `remediated`, `durationMs`, `actual` (event summary), `t`. `t` and `durationMs` are integer milliseconds: the runner rounds the fractional page clock because `/api/attempts` requires an integer. The server stores; it does not grade.
 
 ## Repeated-failure policy
 
@@ -275,7 +293,7 @@ flowchart TD
 | Worked example | `place`: the part tweens from its current position into the socket, then returns. `identify` or `compare`: answer pulses with camera framing. `sequence`: steps highlight in order with 600 ms gaps. | `expect` plus manifest socket transforms; no animation clip required | **MVP** |
 | Prerequisite micro-task | `place` or `remove` → an `identify` of the same `componentId` ("First, point to the aorta."). `sequence` → `identify` of the first wrong step. `compare` → `identify` of each candidate. `identify` → same task with level-3 highlight active. | Synthesised by the engine from `expect`; not stored as content; scored 0 points, logged as `task_attempt` with `remediated: true` | **MVP** |
 | Retry | Original prompt, attempts reset, score counts with `hintsUsed = 3` | engine | **MVP** |
-| Second exhaustion | Task recorded as failed; mastery screen names the objective and offers the explore activity again | engine | **MVP** |
+| Second exhaustion | Task recorded as failed; mastery screen names the objective (**MVP**). Re-offering the explore activity happens only in dev sessions (**MVP**) and for learners in **V1**; never in pilot or study sessions (see [results](#progress-mastery-and-the-separation-from-xp)) | engine | **MVP** |
 | Authored override | A content-specified micro-task or manifest animation instead of the synthesised one | proposed `task.remediation` field | **V1**, pending schema change |
 
 The micro-task is deliberately a step down the Bloom ladder: if a learner cannot place the aorta, the most likely gap is not knowing which part is the aorta, which `identify` tests directly. Wrong-object errors (failure state 4) in `place` tasks produce `incorrect` with a named `actual`, which is exactly what the level-2 tutor hint needs; confusion (failure state 6) is handled by the learner requesting a hint or asking the tutor, both of which the engine logs as `hint_shown` and `tutor_message` for the process-data analysis.
@@ -304,6 +322,8 @@ These are stated here rather than applied silently; the `lesson-schema` skill re
 
 - Should hint penalties apply in challenge activities at all, or only in guided? The heart example applies none in challenge; the engine supports either.
 - Is a single remediation cycle per task enough for the pilot, or should the second exhaustion also re-run explore before marking failed?
+- Should the results screen show a star rating? Stars would be a scoring rule layered on mastery; MVP shows none ([11 Results](11-ui-ux.md)). If adopted, stars must stay hidden in pilot and study sessions.
+- Should the hint cost (`scoring.hintPenalty`) be displayed to the learner, for example on the Hint button? The penalty is applied either way; only its display is open. If adopted, it must stay hidden in pilot and study sessions.
 
 ## Related
 

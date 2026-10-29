@@ -76,16 +76,16 @@ flowchart TD
   end
 
   subgraph Server["Vercel: Next.js route handlers"]
-    RS["POST /api/session<br/>DELETE /api/session/:id"]
+    RS["POST /api/session<br/>PATCH /api/session/:id (progress)<br/>DELETE /api/session/:id<br/>GET /api/session/:id/export<br/>POST /api/session/:id/restart (dev)"]
     RT["POST /api/tutor<br/>validate, cap, log"]
     TUT["TutorService (template)<br/>packages/tutor, in-process"]
-    RA["POST /api/attempts<br/>PUT /api/progress"]
+    RA["POST /api/attempts<br/>PUT /api/progress (V1)"]
     RE["POST /api/events"]
     RC["GET /api/content/*"]
     AUTH["Auth.js"]
   end
 
-  PG[("Postgres on Neon<br/>research_sessions, lesson_attempts, progress,<br/>event_logs, instrument_responses,<br/>consent_records, ai_interactions")]
+  PG[("Postgres on Neon<br/>research_sessions, lesson_attempts, progress (V1),<br/>event_logs, instrument_responses,<br/>consent_records, ai_interactions")]
   CT[("content tables")]
   STATIC["Same-origin static<br/>mediapipe .task .wasm, draco,<br/>public/models GLB (MVP)"]
   CDN["Object storage + CDN (V1)<br/>GLB per modelId"]
@@ -137,8 +137,8 @@ flowchart TD
 
 | Element | Tier | Notes |
 |---|---|---|
-| Learner, webcam, camera capture, vision worker, gesture FSM, mouse adapter, scene, learning engine, HUD, logger, stores | **MVP** | All in the browser; frames and landmarks never leave the worker and FSM. Module contents in [16](16-folder-structure.md#directory-guide) |
-| Route handlers `session`, `tutor`, `attempts`, `events` (`progress` is **V1**) | **MVP** | Validate with Zod, verify `sessionId` against the cookie, write rows; no business logic |
+| Learner, webcam, camera capture, vision worker, gesture FSM, mouse adapter, scene, learning engine, HUD, logger, stores | **MVP** | All in the browser; video frames never leave the tab. Landmarks reach only the gesture FSM and, through the `showHands` option (opt-in at the vision API, always on in the lesson preview), the camera preview overlay, which draws each frame's `hands` message and drops it; they are never logged, stored, or sent ([04 Landmark preview overlay](04-computer-vision.md#landmark-preview-overlay)). Module contents in [16](16-folder-structure.md#directory-guide) |
+| Route handlers `session` (create/resume, delete, export, dev restart), `tutor`, `attempts`, `events` (`progress` is **V1**) | **MVP** | Validate with Zod, verify `sessionId` against the cookie, write rows; no business logic |
 | Postgres tables | **MVP** | Six MVP tables: `research_sessions`, `lesson_attempts`, `event_logs`, `instrument_responses`, `consent_records`, `ai_interactions`, plus `progress` (**V1**), as named in [09](09-database.md) |
 | Same-origin static assets | **MVP** | `public/mediapipe/`, `public/draco/`, `public/models/` (GLB for the pilot); CSP allows `'self'` and `'wasm-unsafe-eval'` only |
 | Object storage and CDN | **V1** | Cloudflare R2 before the main study; one immutable key per model id; `NEXT_PUBLIC_ASSET_BASE_URL` switches the loader ([10 GLB hosting](10-3d-content-system.md#glb-hosting)) |

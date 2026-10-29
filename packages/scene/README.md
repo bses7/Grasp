@@ -15,11 +15,11 @@ Phase C scaffold. Types, constants, and the key map are real; every function thr
 | Milestone | Files | Delivers |
 |---|---|---|
 | M5 mouse drag | `drag-plane.ts`, `sockets.ts`, `components/component-mesh.tsx`, `components/socket-marker.tsx`, `components/mouse-controls.tsx`, `components/lesson-scene.tsx` | Three primitives, three ring sockets, `MouseControls` key map (Esc, Tab, Enter, Space, arrows, PageUp/PageDown, +/-, wheel, R, X), snap on `grab_end`, `place` or `drop` |
-| M6 cursor raycast | `coords.ts`, `raycast.ts`, `commands.ts` (`highlight`) | Mirror, cover-fit, clamp, NDC; one shared raycaster on `INTERACTABLE_LAYER`; emissive tint; `hover_result` back to the worker |
+| M6 cursor raycast | `coords.ts`, `raycast.ts`, `components/lesson-scene.tsx` (`highlight`) | Mirror, cover-fit, clamp, NDC; one shared raycaster on `INTERACTABLE_LAYER`; emissive tint; `hover_result` back to the worker |
 | M7 gesture grab | `drag-plane.ts` (`moveGrab` z-hint, bounds), `scene-state.ts` | `Z_GAIN` 0.3, `Z_MAX` 0.15; `grab_end` with `reason: "lost"` settles without a socket search and emits `drop` with `cause: "lost"`; `SceneState` snapshot and diff |
-| M8 place check | `commands.ts` (`reset`) | Engine-driven reset over 400 ms; no scene code knows the verdict |
-| M9 real heart GLB | `commands.ts` (`setPose`, `cameraTo`, `setVisible`), `sockets.ts` (`resolveSocketVisual`), model loader | Drei `useGLTF` with self-hosted Draco decoder; mesh names equal `components[].id` |
-| Phase 4 (post-prototype) | `components/orbit-rig.tsx`, `components/hotspot.tsx` | Orbit on empty space, hotspot markers and labels, dwell select |
+| M8 place check | `components/lesson-scene.tsx` (`reset`) | Engine-driven reset over 400 ms; no scene code knows the verdict |
+| M9 real heart GLB | `sockets.ts` (`resolveSocketVisual`), model loader | Drei `useGLTF` with self-hosted Draco decoder; mesh names equal `components[].id` |
+| Phase 4 (post-prototype) | `orbit.ts`, `components/hotspot.tsx`, `components/lesson-scene.tsx` | Orbit on empty space, dolly, poses and explode, hotspot markers and labels, hint pulse, cameraTo, setVisible |
 
 Interfaces kept stable: input is `InteractionEvent` (`mediapipe-hands` section 8 plus doc 04's `cursor` event and `grab_end.reason`); output is `SceneEvent` and `SceneState` (`r3f-interaction` section 11 with `hotspotId` and `cause` on `lastEvent`). All types come from `@grasp/types`.
 

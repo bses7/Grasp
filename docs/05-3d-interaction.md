@@ -30,7 +30,7 @@ Supporting libraries, compared and recommended one per role:
 
 | Role | Options | Recommendation | Tier |
 |---|---|---|---|
-| Helpers | Drei vs hand-rolled | Drei (`useGLTF`, `Html`, `Environment`, `OrbitControls`) | **MVP** |
+| Helpers | Drei vs hand-rolled | Drei (`useGLTF`, `Environment`); orbit and hotspot labels are in-house (sections 3.3, 3.7) | **MVP** |
 | State store | Zustand vs Redux vs Context | Zustand with transient `subscribe` for per-frame values; React state only for discrete events | **MVP** |
 | Tweening | in-house `useFrame` tween (~60 lines, `maath/easing` already ships with Drei) vs `@react-spring/three` vs GSAP | In-house tween; adopt `@react-spring/three` only if choreography grows. GSAP rejected: licence weight and no R3F benefit | **MVP** |
 | Post-processing | `@react-three/postprocessing` `Outline` vs emissive tint | Emissive tint for highlight; outline only when measured frame time leaves 8 ms headroom | tint **MVP**, outline **V1** |
@@ -73,7 +73,7 @@ if av > ac:  s = ac / av ; u2 = (u - (1 - s) / 2) / s ; v2 = v
 else:        s = av / ac ; v2 = (v - (1 - s) / 2) / s ; u2 = u
 ```
 
-A `reachScale` factor (default 1.0, **MVP** knob) can magnify a central region of the camera frame onto the full canvas so learners do not have to swing their arm across the whole field of view; it is tuned from pilot sessions, not guessed. The on-screen cursor is drawn on the canvas by this layer, so the learner always sees where the system thinks their finger is.
+A `reachScale` factor (default 1.0, **MVP** knob) can magnify a central region of the camera frame onto the full canvas so learners do not have to swing their arm across the whole field of view; it is tuned from pilot sessions, not guessed. The on-screen cursor is drawn by this layer as a DOM overlay over the canvas (moved by ref, no React commit; above HUD dialogs on the lesson page, section 7), so the learner always sees where the system thinks their finger is.
 
 ## 3. The twelve capabilities
 
@@ -88,11 +88,11 @@ Overview; design notes follow. Mouse and keyboard columns are the control-condit
 | 5 | Object rotation | whole model orbit: `pinch_drag` on empty space. Held component: `wrist_rotate` | drag on empty space; arrows with no grab. Component: Q/E | orbit **MVP**, component **V1** |
 | 6 | Object scaling (camera dolly, whole model only) | `two_hand_scale` (**V1**) | mouse wheel; + / − keys | **MVP** capability; disabled in study sessions for parity (flag, not tier); `two_hand_scale` gesture **V1** |
 | 7 | Component highlighting | emissive tint on hover; pulse on hint | same | **MVP** |
-| 8 | Object snapping | on `release` within socket radius | on mouse up / Enter | **MVP** |
-| 9 | Component separation | pose tween assembled ↔ exploded; drag out of socket | slider; X key | **MVP** |
+| 8 | Object snapping | on `release` within `radius × SNAP_TOLERANCE` (1.5) of a socket, measured on screen; the target ring lights while held | on mouse up / Enter | **MVP** |
+| 9 | Component separation | pose tween assembled ↔ exploded; drag out of socket | slider; X key (disabled under `studyParity`: no gesture path) | **MVP** |
 | 10 | Guided animations | camera and pose tweens; GLB clips | same (engine-driven) | tweens **MVP**, clips **V1** |
 | 11 | Resetting scenes | engine command | R key, HUD button | **MVP** |
-| 12 | Interactive hotspots | `point` dwell on marker | click; Tab | **MVP** |
+| 12 | Interactive hotspots | `point` dwell on marker | click; Tab + Enter | **MVP** |
 
 ### 3.1 Selection and raycasting
 
@@ -100,27 +100,60 @@ Raycast at most once per frame against a flattened `interactables` array. `hover
 
 ### 3.2 Grab, move, and the drag plane
 
-On `grab_start` with a grabbable hit, the scene builds a plane through the component's position with normal equal to the camera's view direction, stores the offset between the component and the ray-plane intersection, detaches the component from its socket, and marks the socket empty. Each `grab_move` intersects the ray with that plane, adds the offset, applies the low-gain z-hint and constraints, and lerps toward the result (factor 0.5) on top of the CV layer's One-Euro smoothing. Snap happens only on `grab_end`. Full reasoning is in [section 5](#5-depth-estimation-and-its-limitations).
+On `grab_start` with a grabbable hit, the scene builds a plane through the component's position with normal equal to the camera's view direction, stores the offset between the component and the ray-plane intersection, detaches the component from its socket, and marks the socket empty. Each `grab_move` intersects the ray with that plane, adds the offset, applies the low-gain z-hint and constraints, and lerps toward the result (factor 0.5) on top of the CV layer's One-Euro smoothing. Snap happens only on `grab_end`; during the drag the scene only lights the ring of the socket the part would snap into (section 3.5). While held, the part draws on top of everything (`drawOnTop` in `LessonScene`: material `depthTest` off, `renderOrder` 20, restored on release or `setPose`), so it stays visible when it passes behind another part, for example `aorta` moving behind `pulmonary_artery` (**MVP**; limitation: the held part no longer looks occluded, so depth order is not shown while dragging). Full reasoning is in [section 5](#5-depth-estimation-and-its-limitations).
 
 ### 3.3 Rotation and scaling
 
-Whole-model orbit is `pinch_drag` that started on empty space: azimuth and elevation change proportionally to cursor delta, around the model centre, clamped to elevation ±80°. A ~40-line orbit rig is preferred over feeding synthetic pointer events to Drei `OrbitControls`, which fights with real pointer input in the mouse condition. Held components keep their orientation in **MVP**; sockets supply rotation on snap, so no task needs component rotation. Per-component scaling has no learning value in anatomy; "scale" means camera dolly (distance) of the whole model. Camera dolly is an **MVP** capability, driven by the mouse wheel and the + / − keys. The `two_hand_scale` gesture is **V1** and drives the same dolly. For research parity the mouse condition must not gain capabilities the gesture condition lacks, so camera dolly is disabled in study sessions by a session flag (`studyParity`); this is a flag, not a tier change, and the capability stays **MVP** outside study sessions. Q/E component rotation is **V1** because component rotation itself is **V1**.
+Whole-model orbit is `pinch_drag` that started on empty space: azimuth and elevation change proportionally to cursor delta, around the model centre, clamped to elevation ±80°. Orbit is pure functions in `packages/scene/src/orbit.ts` (`orbitFrom`, `dolly`, `poseFacing`, `lerpPose`) driven inside `LessonScene`, not a separate rig component and not synthetic pointer events fed to Drei `OrbitControls`, which fight with real pointer input in the mouse condition. Arrow keys with nothing grabbed orbit 10° per press (Shift ×4); dolly is clamped to 8–80 scene units. Held components keep their orientation in **MVP**; sockets supply rotation on snap, so no task needs component rotation. Per-component scaling has no learning value in anatomy; "scale" means camera dolly (distance) of the whole model. Camera dolly is an **MVP** capability, driven by the mouse wheel and the + / − keys. The `two_hand_scale` gesture is **V1** and drives the same dolly. For research parity the mouse condition must not gain capabilities the gesture condition lacks, so camera dolly is disabled in study sessions by a session flag (`studyParity`); the X explode toggle is keyboard-only with no gesture path, so `studyParity` disables it too (`toggleExplode` in `LessonScene`). This is a flag, not a tier change, and the capability stays **MVP** outside study sessions. Q/E component rotation is **V1** because component rotation itself is **V1**.
+
+View lift (**MVP**): `VIEW_LIFT = 1.5` scene units raises both the camera position and its `lookAt` target in y, so the model sits a little below centre over the CSS plinth of [doc 11](11-ui-ux.md#backdrop-sage-plinth-blood-cells). Orbit math is unchanged; only `cameraPosition()` is offset. Raycasting stays consistent because `setFromCamera` reads the camera matrices.
+
+Introduction turntable (**MVP**, `autoRotate` prop on `LessonScene`, set by the lesson page only in `introduction`):
+
+| Rule | Behaviour |
+|---|---|
+| Motion | Camera azimuth turns 12°/s in one rAF loop that renders every frame, as a drag does |
+| Learner takes over | Any `grab_start` (orbit or part), arrow-key orbit, or dolly stops it for the rest of the activity |
+| Reduced motion | Off under `prefers-reduced-motion`; the lesson page passes `reducedMotion` to `LessonScene` |
+| Activity ends untouched | Camera tweens back to the default view |
+
+Limitation: the introduction now renders continuously while the camera and CV run, so it is in the pre-pilot measurement (section 10).
 
 ### 3.4 Highlighting
 
-Hover: swap the material emissive to the highlight colour (configurable, high-contrast option). Hint pulses from the engine (`highlight: ["left_ventricle", "right_ventricle"]` in lesson JSON) animate emissive intensity at 1 Hz for 3 s. Highlights are never the only feedback channel; the HUD adds text and an icon ([11-ui-ux.md](11-ui-ux.md)). Outline post-processing is **V1**, gated on measured headroom.
+Hover: swap the material emissive to the highlight colour. Hint pulses from the engine (`highlight: ["left_ventricle", "right_ventricle"]` in lesson JSON) animate emissive intensity at 1 Hz for 3 s (`HINT_PULSE_MS` = 3000; this is the canonical hint-pulse timing, and the `cameraTo` tween is 600 ms, section 4). Highlights are never the only feedback channel; the HUD adds text and an icon ([11-ui-ux.md](11-ui-ux.md)). Outline post-processing is **V1**, gated on measured headroom.
+
+Tint colours follow the light Heart studio theme of [doc 11](11-ui-ux.md#colour-roles) (restyle 2026-10-29). The emissive constants `TINT` and `OUTCOME_TINT` in `packages/scene/src/components/lesson-scene.tsx` were derived from the retired dark-theme roles and must be re-derived from the doc 11 tokens (read through `tokens.ts`) when the restyle is built:
+
+| State | Emissive source | Note | Tier |
+|---|---|---|---|
+| Hover, hint pulse | doc 11 `highlight` role: `gold` at low emissive intensity | Replaces the old `accent` tint, which vanished on a maroon heart | **MVP** |
+| Grabbed, keyboard focus | derived from doc 11 roles, distinct from hover | Retune with hover | **MVP** |
+| Outcome (`correct`, `partial`, `incorrect`) | emissive versions of doc 11 `success`, `partial`, `error` | Dimmed, because emissive adds to the base colour | **MVP** |
+
+Known problem: on `heart_v1` the fat regions are already gold (`#ae8c46`), so a gold emissive hover barely changes them. Options, cheapest first:
+
+| Option | Cost | Limitation | Verdict |
+|---|---|---|---|
+| Stronger emissive intensity for hover (per-model multiplier) | One constant; zero draw calls | Washes out the muscle texture on the rest of the part; still colour-only | **MVP**, tune on `heart_v1` first |
+| Inverted hull outline (back-face clone of the hovered part, scaled along normals, unlit `text` colour) | One extra draw call for the hovered part only; no post-processing pass | Needs smooth normals (seams crack on split meshes); a clone per hovered part to manage | **V1**, unless tuning the emissive fails the pilot check; then it is the cheap fallback and may move to **MVP** |
+| `@react-three/postprocessing` `Outline` | Full-screen passes; costs most on an integrated GPU | Gated on frame time p95 < 20 ms without it (section 10) | **V1**, unchanged |
+
+High contrast (**MVP**, matching doc 11): the scene keeps the same emissive tint, and the cue that does not depend on colour is a `text`-coloured keyline on the cursor ring (DOM overlay, section 2) and on the socket ring (`socket-marker.tsx`), plus the HUD icon and text. No outline is drawn on components in **MVP**; any component outline in high contrast is **V1**, through the inverted hull or post-processing above.
 
 ### 3.5 Snapping and sockets
 
-Sockets come from the model manifest (`socket_left_ventricle`, `socket_aorta`, and so on; type in `lesson-schema` section 2). On `grab_end` the scene finds the nearest socket whose `accepts` contains the component and whose distance is under `radius`, snaps position and rotation over 150 ms, and emits `{ type: "place", componentId, socketId }`. Otherwise the component settles where dropped and `{ type: "drop", componentId, position, cause: "release" }` is emitted. If the `grab_end` carries `reason: "lost"` (tracking lost during the grab; doc 04), the scene skips the socket search entirely, settles the component in place, and emits `drop` with `cause: "lost"`; a `place` can never result from a loss. `accepts` is permissive and lists distractors (the heart manifest lets every chamber socket accept all four chambers and both great-vessel sockets accept both vessels), so `place` fires for any accepting socket. A socket accepting a component is not correctness; dropping `aorta` into `socket_aorta` during a task that expects `pulmonary_artery` snaps tidily, stays snapped, and the engine marks it wrong. The scene never receives or acts on a verdict. Socket visuals follow the manifest (`ghost`, `ring`, `none`) and the activity's `socketsVisible`.
+Sockets come from the model manifest (`socket_left_ventricle`, `socket_aorta`, and so on; type in `lesson-schema` section 2). On `grab_end` the scene calls `nearestAcceptingSocket(component, sockets, occupancy, viewDir)` (`packages/scene/src/sockets.ts`): among sockets whose `accepts` contains the component and that are empty or already hold it, the nearest whose distance is under `radius × SNAP_TOLERANCE` wins (`SNAP_TOLERANCE = 1.5`, **MVP**; user feedback 2026-10-29: placement at `radius` was too precise). `viewDir` is the camera's forward vector (`camera.getWorldDirection`), and the depth component of the part-to-socket gap is removed before measuring, so the snap test is screen-space: the drag plane faces the camera, the learner can line a part up on screen but cannot change its depth (section 5), and a depth gap must not block the snap. Nearest wins, so the overlapping ranges of `socket_aorta` and `socket_pulmonary_artery` (radius 2 each in `heart_v1`) still pick the closer one. Limitation: a part held in front of or behind a socket along the view axis snaps to it, which is intended under locked position 4. On a snap the scene tweens position and rotation over 150 ms, and emits `{ type: "place", componentId, socketId }`. Otherwise the component settles where dropped and `{ type: "drop", componentId, position, cause: "release" }` is emitted. If the `grab_end` carries `reason: "lost"` (tracking lost during the grab; doc 04), the scene skips the socket search entirely, settles the component in place, and emits `drop` with `cause: "lost"`; a `place` can never result from a loss. `accepts` is permissive and lists distractors (the heart manifest lets every chamber socket accept all four chambers and both great-vessel sockets accept both vessels), so `place` fires for any accepting socket. A socket accepting a component is not correctness; dropping `aorta` into `socket_aorta` during a task that expects `pulmonary_artery` snaps tidily, stays snapped, and the engine marks it wrong. The scene never receives or acts on a verdict. A release before the part moved is not an action: on `reason: "release"`, if the component is exactly at its grab-start position, `endGrab` emits nothing and the component keeps its socket, so a mouse click or a pinch-and-let-go never becomes `place` or `drop` (**MVP**; a lost grab still emits `drop` with `cause: "lost"`). The hand path emits `grab_move` only after the cursor travels `DRAG_START_DIST` ([doc 04](04-computer-vision.md)), so "part unmoved at release" is the same as "no `grab_move` received", and this suppression agrees with the `firstMoveMs == null` false start logged in [doc 14](14-evaluation-methodology.md). Socket visuals follow the manifest (`ghost`, `ring`, `none`) and the activity's `socketsVisible`.
+
+Held-part feedback (**MVP**, the "release to place here" pre-commit state in [doc 11](11-ui-ux.md)): on each `grab_move` the scene also calls `nearestAcceptingSocket` with the same `viewDir` and lights that socket's ring (`lightRing`: `RING_COLOR.inRange` at opacity 1; every other ring `RING_COLOR.idle` at 0.6, from `socket-marker.tsx`). Ring meshes reach `LessonScene` through the `SocketMarker` `register` prop, and only material colour and opacity change, so there is no React commit during the drag (section 10). Lighting is cleared on `grab_end` and `setPose`. The call loops over a handful of sockets, so the per-move cost is negligible. Limitations: the drawn ring has radius `radius`, while the snap range is 1.5× that, so a part can light a ring from outside it; with `socketVisual: "none"` (assessment) there is no ring to light, so no in-range cue is shown.
 
 ### 3.6 Separation, guided animation, and reset
 
-Separation uses the named poses `assembled` and `exploded` from the manifest: `position = lerp(assembled, exploded, t)` for each component, with `t` from a HUD slider or set to 1 by the engine for the challenge activity. A `remove` task is satisfied by grabbing a component out of its socket beyond `radius` and releasing, which yields a `drop` event. Guided animation in **MVP** is a camera tween to a hotspot or component (`cameraTo` in hints) and pose tweens; GLB `AnimationMixer` clips named in `manifest.animations` are **V1**. Reset keeps an immutable snapshot of initial poses and socket occupancy taken when the activity loads, tweens back over 400 ms, and is invoked by the engine; the HUD reset button goes through the engine so that attempt state is cleared consistently. Reduced-motion disables all tween easing.
+Separation uses the named poses `assembled` and `exploded` from the manifest: `position = lerp(assembled, exploded, t)` for each component, with `t` from a HUD slider or set to 1 by the engine for the challenge activity. The X key toggles `exploded` and back to the activity's pose; like dolly it is disabled under `studyParity` because it has no gesture path (section 3.3). A `remove` task is satisfied by grabbing a component out of its socket beyond `radius × SNAP_TOLERANCE` on screen (or into another socket) and releasing, which yields a `drop` event. Guided animation in **MVP** is a camera tween to a hotspot or component (`cameraTo` in hints), pose tweens, and `demonstrate` (the worked example of the remediation sequence, [doc 06](06-learning-engine.md)): the part gets the hint pulse and, given a socket, tweens into it over 700 ms, holds 900 ms, and tweens back to where it was; occupancy never changes and no scene event is emitted. Under reduced motion the hint highlight is static (no 1 Hz swing) and the part jumps into the socket and back with no tween, so the worked example still shows where it goes (matches the motion rules in [doc 11](11-ui-ux.md)). GLB `AnimationMixer` clips named in `manifest.animations` are **V1**. Reset keeps an immutable snapshot of initial poses and socket occupancy taken when the activity loads, tweens back over 400 ms, and is invoked by the engine; the HUD reset button goes through the engine so that attempt state is cleared consistently. Reduced-motion disables all tween easing.
 
 ### 3.7 Hotspots
 
-A hotspot is `{ id, componentId, localPosition, label, kind }` from the manifest (`hs_lv_wall`, `hs_septum`). Marker: a billboard sprite on the interactable layer; label: Drei `Html` with `occlude` so it hides behind geometry. Hotspots are selectable like components and emit `{ type: "select", hotspotId }`, which the engine uses for explore-activity completion and `kind: "task"` prompts.
+A hotspot is `{ id, componentId, localPosition, label, kind }` from the manifest (`hs_lv_wall`, `hs_rv`). Marker: a depth-tested sphere parented to the component node, so it moves with the component. Label: a single DOM element positioned over the projected marker on hover or keyboard focus, not Drei `<Html occlude>`. Limitation (ponytail simplification): a part in front hides the marker but not the label. Hotspots are selectable like components and emit `{ type: "select", hotspotId }`, which the engine uses for explore-activity completion and `kind: "task"` prompts. Tab cycles components and each component's hotspots; Enter selects a hotspot. `LessonScene` takes a `showHotspots` prop; the lesson page shows hotspots only in `introduction` and `explore`, because labels name parts and would give answers away in graded activities (**MVP**).
 
 ## 4. Scene events and SceneState contract
 
@@ -138,12 +171,14 @@ Scene events:
 |---|---|---|
 | `select` | `componentId` or `hotspotId` | dwell completes, click, or `grab_start` on a component |
 | `place` | `componentId`, `socketId` | `grab_end` snapped into a socket |
-| `drop` | `componentId`, `position`, `cause: "release" \| "lost"` | `grab_end` outside any accepting socket (`cause: "release"`), or any `grab_end` with `reason: "lost"` (`cause: "lost"`, socket search skipped) |
+| `drop` | `componentId`, `position`, `cause: "release" \| "lost"` | `grab_end` outside any accepting socket (`cause: "release"`), or any `grab_end` with `reason: "lost"` (`cause: "lost"`, socket search skipped). No event at all for a `release` with the component still at its grab-start position |
 | `hover` | `componentId \| null` | `hoveredId` changes (not per frame) |
 
 `drop.cause` exists because the learning engine never sees interaction events and so cannot read `grab_end.reason`; it needs `cause` to discard loss-caused drops in every task type (a lost hand is not an attempt). The scene attaches the cause and does nothing else with it.
 
-Scene commands from the engine: `setPose(name)`, `highlight(ids, durationMs)`, `cameraTo(target)`, `setSocketVisual(socketId, visual)`, `setVisible(ids)`, `reset()`, `playAnimation(id)` (**V1**). They carry no lesson logic; the engine decides when to call them.
+Scene commands from the engine (signatures match `packages/types/src/scene-events.ts`): `setPose(pose)`, `highlight(ids, durationMs?, style?)` (no `style` = hint pulse; `style` `correct` \| `partial` \| `incorrect` = outcome tint), `cameraTo(target)`, `setSocketVisual(socketId, visual)`, `setVisible(ids, visible)`, `reset()`, `demonstrate(componentId, socketId?)` (**MVP**, section 3.6), `playAnimation(animationId)` (**V1**). They carry no lesson logic; the engine decides when to call them.
+
+`cameraTo(target)` keeps the camera distance and orbits (600 ms tween; a cut under reduced motion) to face the side the target's hotspot sits on: direction = hotspot marker world position minus its component's origin, so a detached part shows the same face as an assembled one. A component target uses its first hotspot; a component without a hotspot keeps the view.
 
 `SceneState` is the only scene information that leaves the browser (to the tutor route), and it is also what the research logger samples:
 
@@ -171,7 +206,7 @@ Single-webcam depth is unreliable for three reasons. MediaPipe's landmark `z` is
 | Raw landmark `z` | map `z` to scene depth | Poor; jitter of several cm | Confusing | Trivial | Reject |
 | Camera-facing drag plane | move on a plane through the grabbed object, normal to the view | High; hand 2D motion becomes object 2D motion at constant perceived depth | Predictable | Low | **MVP** |
 | Low-gain z-hint | `handSize` change relative to calibration pushes along view axis, `Z_GAIN` 0.3, clamped `Z_MAX` 0.15 scene units per frame | Medium; drift is bounded by the clamp | Subtle push/pull | Low | **MVP**, on top of the plane |
-| Snap sockets | correct depth supplied by the socket pose on release | High | Learner only needs to be near | Low | **MVP** |
+| Snap sockets | correct depth supplied by the socket pose on release | High | Learner only needs to be near on screen (within 1.5× radius, view-axis depth ignored; section 3.5) | Low | **MVP** |
 | Constrained motion | workspace bounds box; optional per-task axis locks | High | Reduces degrees of freedom | Low | **MVP** |
 | Ground plane | drag on a horizontal table plane; good for assembly scenes | High | Different mental model | Low, but needs a lesson-JSON flag | **V1**, opt-in per activity |
 | Depth camera or stereo | hardware depth | High | Natural | Hardware cost, device fragmentation | **Future** |
@@ -199,10 +234,11 @@ on interactionEvent(e):
       c = ancestorComponentId(hit)
       emit select(c)
       if not activity.allowGrab or not manifest[c].grabbable: return
-      grabbed = c
+      grabbed = c; grabStartPosition = c.position
       dragPlane = Plane(normal = camera.worldDirection, through = c.position)
       grabOffset = c.position - intersect(ray(ndc), dragPlane)
       if c.socketId: sockets[c.socketId].occupant = null; c.socketId = null
+      drawOnTop(c, true)                                 // depthTest off, renderOrder 20 while held
 
     grab_move:
       if orbit.active: camera.azimuth, elevation = cam0 + (cursor - start) * ORBIT_GAIN; clampElevation(); return
@@ -211,16 +247,22 @@ on interactionEvent(e):
       p += camera.forward * clamp(e.zHintDelta * Z_GAIN, -Z_MAX, Z_MAX)
       p = clampToBounds(p, workspace); p = applyAxisLocks(p, task)
       grabbed.position = lerp(grabbed.position, p, 0.5)   // refs only; no React state
+      lightRing(nearestAcceptingSocket(grabbed, sockets, occupancy, camera.forward))   // material only, no commit
 
     grab_end:
       if orbit.active: orbit.active = false; return
       if not grabbed: return
+      drawOnTop(grabbed, false); lightRing(null)
       if e.reason == "lost":                             // worker-owned grace period expired (doc 04)
         settle grabbed in place                          // no socket search; a loss never produces place
         emit drop(grabbed.id, grabbed.position, cause: "lost")
         grabbed = null; return
-      s = nearestSocket(grabbed, where accepts includes grabbed.id)
-      if s and dist(grabbed.position, s.position) < s.radius:
+      if grabbed.position == grabStartPosition:         // click or pinch-and-let-go: not an action
+        restore grabbed.socketId and socket occupant; grabbed = null; return   // no event
+      s = nearestAcceptingSocket(grabbed, sockets, occupancy, camera.forward)
+          // accepts includes grabbed.id, socket empty or already its own,
+          // gap minus its component along camera.forward < s.radius * SNAP_TOLERANCE (1.5), nearest wins
+      if s:
         tween(grabbed → s.transform, 150 ms); s.occupant = grabbed.id; grabbed.socketId = s.id
         emit place(grabbed.id, s.id)
       else:
@@ -247,10 +289,12 @@ Both input modes produce the same interaction events through an `InputSource` ad
 | `pinch` | `grab_start` | left button down | Space on focused component | **MVP** |
 | `pinch_drag` | `grab_move` | drag with button held | arrows move 0.5 scene units per press on the drag plane; PageUp/PageDown apply the z-hint; Shift multiplies by 4 | **MVP** |
 | `release` | `grab_end` | button up | Space or Enter again | **MVP** |
-| `pinch_drag` on empty space (orbit) | `grab_start` with no hit | drag on empty space | arrows with nothing grabbed | **MVP** |
+| `pinch_drag` on empty space (orbit) | `grab_start` with no hit | drag on empty space | arrows with nothing grabbed, 10° per press (Shift ×4) | **MVP** |
 | `two_hand_scale` (**V1**) | camera dolly | wheel | + / − | dolly **MVP** (disabled in study sessions for parity, by flag); gesture **V1** |
 | `wrist_rotate` | component rotation | right-drag | Q / E | **V1** |
-| Reset, explode, escape | commands | HUD buttons | R, X, Esc (cancel grab, settle in place → `drop` with `cause: "release"`) | **MVP** |
+| Reset, explode, escape | commands | HUD buttons | R, X (toggle `exploded` and back to the activity's pose; disabled under `studyParity`, like dolly, since it has no gesture path), Esc (cancel grab, settle in place → `drop` with `cause: "release"`; no event if the part has not moved) | **MVP** |
+
+On the lesson page the hand reaches HUD controls as well as the scene. The hand cursor overlay sits above HUD cards and dialogs (`zIndex` 50 in `LessonScene`'s `CURSOR_STYLE`) so the learner can aim at their buttons. A pinch whose `grab_start` lands on a page control clicks it at once and the rest of that pinch (`grab_move`, `grab_end`) is swallowed, so it never grabs or orbits in the scene (`pinchOnControl` in `lesson-client.tsx`); dwell-to-click on HUD buttons still works (**MVP**).
 
 Keyboard focus order follows the manifest's `components` order, and focus is announced through an ARIA live region owned by the HUD. The dwell ring, highlight colour, and reduced-motion behaviour are shared across all three input modes.
 
@@ -300,7 +344,7 @@ Locked position 6: 30 fps combined MediaPipe plus R3F on a laptop integrated GPU
 | GLB size | < 5 MB compressed | CI check in the content pipeline | **MVP** |
 | Time to first interaction | ≤ 5 s on 10 Mbps | `performance.mark` from navigation to first raycast | **MVP** |
 | Raycast cost | ≤ 1 ms per frame | `performance.now()` around `intersectObjects` in dev | **MVP** |
-| React commits during drag | 0 per frame | React Profiler in dev; assertion in a debug build | **MVP** |
+| React commits during drag | 0 per frame | `/prototype`: Profiler counter shown in the debug panel. `/lesson/[lessonId]` (doc 12 A9): a React Profiler around the page counts commits from the third `grab_move` to `grab_end` and `console.warn`s if any occurred (development builds; the first moves are skipped because the one-off "Dragging" hand-state change commits) | **MVP** |
 | Dropped frames per minute | ≤ 30 | frames with delta > 50 ms, logged | **MVP** |
 
 Levers, applied in this order when a budget is missed:
@@ -308,12 +352,17 @@ Levers, applied in this order when a budget is missed:
 | Lever | Setting | Tier |
 |---|---|---|
 | Renderer | `dpr={[1, 1.5]}`, `antialias` on only while post-processing is off, `powerPreference: "high-performance"` | **MVP** |
+| Canvas clear | Transparent: `gl={{ alpha: true }}` set explicitly, no `scene.background`, clear alpha 0, so the CSS backdrop of [doc 11](11-ui-ux.md#backdrop-sage-plinth-blood-cells) shows through. Not a lever to cut; listed for its cost (below) | **MVP** |
 | Frame loop | `frameloop="demand"`; `invalidate()` on every interaction event, tween tick, and command; idle after 2 s without events | **MVP** |
 | Shadows | Off; baked AO | **MVP** |
-| Lighting | One directional plus one hemisphere light, or a small Drei `Environment` | **MVP** |
+| Lighting | One hemisphere light (sky `#fff8ef`, ground `#c9d5c3`, intensity 1.6) plus one directional key light from the front (position `[6, 14, 30]`, intensity 2.8). These values were raised after the user found the heart too dark. No extra lights; a small Drei `Environment` is the alternative | **MVP** |
 | Post-processing | None; outline only if frame time p95 < 20 ms without it | **V1** |
 | Raycasting | Interactable layer only, once per frame; `three-mesh-bvh` if > 1 ms | **MVP** / **V1** |
-| Degrade ladder | dpr → 1.0, then disable outline, then ask the CV layer to skip alternate frames | **MVP** |
+| Degrade ladder | dpr → 1.0, then disable the outline if a **V1** outline is on, then ask the CV layer to skip alternate frames | **MVP** |
+
+Transparent canvas and CSS backdrop (**MVP**). The canvas clears to alpha 0 and the browser composites it, with premultiplied alpha, over the doc 11 sage gradient, plinth, and at most four CSS blood-cell discs. Expected cost: negligible, since compositing one layer adds no draw calls and the cells animate `transform` only on the compositor. Limitation: "expected" is not measured, and both the compositor and the CV worker share the integrated GPU. So the pre-pilot measurement doc 11 asks for includes it: on the reference device, with CV running, record render frame time p95 and CV inference p95 with the CSS blood cells on and with them off (canvas transparent in both), taking the median of three runs each, on the reference device in one session. A regression means either p95 rising by more than 2 ms or 5%, whichever is larger, with cells on. On a regression the cells ship off in **pilot and study sessions**. There is no valid earlier baseline to compare against (the M11 stop/go table was not validly measured), so the comparison is always cells on versus off. 3D backdrop props (plinth mesh, instanced cells) are **V1** and need the same on/off check before they ship.
+
+The introduction turntable (section 3.3) is part of the same pre-pilot measurement (**MVP**). Measure stage 1 with the spin running, and compare it against a continuous orbit drag in the same session using the same method and threshold. If either render frame time p95 or inference p95 regresses by more than 2 ms or 5%, whichever is larger, slow it or limit it to a fixed number of seconds.
 
 Measurement in production is the research logger's job: `render_ms_p50`, `render_ms_p95`, `cv_ms_p95`, `draw_calls`, and `dropped_frames` are written per minute to the session log so that interaction accuracy in the study can be analysed against frame rate. The 3D rows of the risk register (browser performance, GPU limitations, large GLB files, mobile compatibility) live in [15-risks-security-scalability.md](15-risks-security-scalability.md).
 

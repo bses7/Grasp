@@ -36,7 +36,7 @@ Bands on the per-objective mastery value from the engine. The engine computes th
 | Band | Condition | Learner sees | Tier |
 |---|---|---|---|
 | Not started | no attempts on the objective's tasks | grey | **MVP** |
-| Developing | mastery < 0.5 | "Keep practising"; the objective's explore and guided activities offered | **MVP** |
+| Developing | mastery < 0.5 | "Keep practising"; the objective's explore and guided activities offered again in dev sessions only (**V1** for learners; never in pilot or study sessions, per [06 results](06-learning-engine.md#progress-mastery-and-the-separation-from-xp)) | **MVP** |
 | Approaching | 0.5 ≤ mastery < `masteryThreshold` | "Nearly there"; the specific failed tasks named | **MVP** |
 | Mastered | mastery ≥ `masteryThreshold` | green; prerequisite satisfied for dependent lessons | **MVP** |
 | Retained | Mastered again in a review quest ≥ 7 days later | gold outline | **V1** |

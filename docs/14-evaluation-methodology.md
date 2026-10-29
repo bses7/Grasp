@@ -79,13 +79,43 @@ Limitation: a 15-item test has a ceiling. Pilot means above 12 on the post-test 
 |---|---|---|
 | SUS | 10 items, 1–5. `score = 2.5 × Σ_i ((odd i: r_i − 1), (even i: 5 − r_i))`, 0–100 | **MVP** |
 | Task difficulty (NASA-TLX, raw) | six subscales (mental, physical, temporal, performance, effort, frustration) on 21-point scales ×5 → 0–100; `rawTLX = mean of six`; no pairwise weighting | **MVP** |
-| Engagement: active ratio | `(T − idle) / T` where idle = Σ gaps > 10 s with no `hover`, `grab_*`, `select` or `tutor_message` | **MVP** |
-| Engagement: voluntary exploration | time in `explore` activity beyond its minimum completion, and `n(select where hotspotId != null)` | **MVP** |
+| Engagement: active ratio | `(T − idle) / T` where idle = Σ gaps > 10 s with no logged interaction event (`grab_start`, `grab_move_summary`, `grab_end`, `select`, `place`, `drop`, `hint_shown`, `tutor_message`). `hover` is never logged, so it cannot count (changed 2026-10-29, step 4.7) | **MVP** |
+| Engagement: voluntary exploration | total time in the `explore` activity, `t(activity_end) − t(activity_start)`, and `n(select where hotspotId != null)`. Explore has no minimum duration: it ends when the learner presses "Start the lesson" (`completion: { continue: true }` in `chambers_v1`), so all of it is voluntary (changed 2026-10-29, step 4.7) | **MVP** |
 | Engagement: tutor use | `n(tutor_message where payload.kind in ("hint", "explain_mistake") and payload.source == "tutor")`; by `kind` and `hintLevel`. `source == "static"` messages (authored hint shown because the tutor fell back) are reported separately via `status` | **MVP** |
 | User satisfaction | single item "I would use this again" 1–7, plus three open questions (hardest part, when tracking failed, suggestions), coded thematically | **MVP** |
-| Perceived tracking quality | single item 1–7, gesture condition only; correlated with lost fraction as a manipulation check | **MVP** |
+| Perceived tracking quality | single item 1–7, gesture condition only; correlated with lost fraction as a manipulation check. Not computed yet: the instrument item is not defined | **MVP** |
 
 Limitation: SUS and TLX are self-report and novelty-sensitive; they are interpreted alongside log metrics, never alone.
+
+### 2.5 Implementation and documented simplifications
+
+Every metric above is computed by `sessionMetrics(events, instrumentRows)` in `packages/learning/src/metrics.ts` (roadmap step 4.7, built 2026-10-29). It is pure; a metric whose inputs were not logged is `null` (every CV metric in the mouse condition, calibration metrics until the tutorial exists, test scores until the instrument pages exist). `scripts/research/metrics.ts` feeds it:
+
+| Command | Output | Tier |
+|---|---|---|
+| `pnpm research:metrics <sessionId \| participantCode>` | all metrics for one session from `event_logs` and `instrument_responses`, as JSON | **MVP** |
+| `pnpm research:metrics <grasp-log-*.json>` | the same from a downloaded event log (no instrument rows, no attempt-row check) | **MVP** |
+| `pnpm research:metrics --phase dev\|pilot\|main` | one summary line per session in that phase | **MVP** |
+
+Where the implementation is simpler than the formulas above (all **MVP**, each reported as a limitation when results are written up):
+
+| Metric | Implemented as | Effect |
+|---|---|---|
+| Precision (2.1) | false positives counted only inside calibration prompt windows; emits outside any window are not counted | precision is an upper bound |
+| Engagement active ratio (2.4) | logged interaction events only; no `hover` | a learner who only hovers counts as idle |
+| Voluntary exploration (2.4) | total explore time, no minimum subtracted | matches the lesson; no bias |
+| Perceived tracking quality (2.4) | not computed | added when the satisfaction instrument defines the item |
+
+**Reconstruction checks** (doc 12 A3 and A16). The script exits 1 when any session fails one:
+
+| Check | Fails when |
+|---|---|
+| Sequence integrity | `seq` has a gap or a duplicate |
+| Attempt inside its task | a `task_attempt` is not between its own `task_start` and `task_end` |
+| No placement while lost | a `place` falls between `tracking_lost` and `tracking_regained` |
+| Event log matches attempt table | the number of `task_attempt` events differs from the session's `lesson_attempts` rows (database runs only; skipped for a session with no events) |
+
+The first run on real recorded sessions failed sequence integrity: a batch in flight when the page reloaded was cancelled, and the `sendBeacon` on `pagehide` cannot resend events already taken from the queue. Fixed by sending every batch with `fetch(..., { keepalive: true })` in `apps/web/lib/logger-transport.ts`. Sessions recorded before the fix keep their gaps; they are reported, not repaired.
 
 ## 3. Academic study design
 
@@ -104,7 +134,7 @@ Limitation: SUS and TLX are self-report and novelty-sensitive; they are interpre
 |---|---|---|
 | Conditions | A: gesture (webcam, five MVP gestures). B: mouse and keyboard (click, drag, arrow keys, Enter). Identical lesson `anatomy.heart.chambers_v1`, model `heart_v1`, tutor, hints, feedback | **MVP** |
 | Participants | Age 16+, no formal cardiac anatomy beyond school level, normal or corrected vision, able to use one hand freely. Minors with parental consent at **V1** | **MVP** / **V1** |
-| Randomisation | Pre-test is scored first; participants are assigned within pre-test tertile (0–5, 6–10, 11–15) using a blocked sequence (block size 4) generated before recruitment. The blocked randomisation list is kept offline by the researcher and never enters the app or database. The app receives only a pre-assigned session code that encodes the condition; it derives `condition` from the code, generates the `sessionId` UUID, and records both on `research_sessions` | **MVP** |
+| Randomisation | Pre-test is scored first; participants are assigned within pre-test tertile (0–5, 6–10, 11–15) using a blocked sequence (block size 4) generated before recruitment. The blocked randomisation list is kept offline by the researcher and never enters the app or database. The app receives only a pre-assigned session code that the researcher types on the consent screen, format `<P|S|D><G|M>-NNN` (phase: pilot, main study, developer; condition: gesture, mouse; list number), for example `PG-014`. `parseAssignmentCode` in `apps/web/lib/consent.ts` derives `study_phase` and `condition`; the app generates the `sessionId` UUID and records all three on `research_sessions`. The app never randomises. Pilot and main-study codes are single-use (a reused code is refused with 409); developer codes (`DG`, `DM`) get a unique suffix so they can be reused | **MVP** |
 | Session 1 (≤ 45 min, in person) | consent (5) → demographics (2) → pre-test form X (6) → calibration tutorial, gesture or mouse (5) → lesson (12–15) → post-test form Y (6) → SUS, TLX, satisfaction, open questions (6) | **MVP** |
 | Session 2 (+7 days ±1, online) | retention test form Z (6), one question on any heart study since S1 | **MVP** |
 | Instruments | Three parallel 15-item knowledge forms (labelled-diagram identification, blood-path ordering, short multiple choice), SUS, raw NASA-TLX, satisfaction, open questions | **MVP** |
@@ -208,7 +238,7 @@ type LogEvent = {
 // hand_count        { n }
 // tutor_message     { interactionId, taskId, kind, hintLevel, status, latencyMs, source }   // never the text; enums owned by doc 07 (kind: hint | explain_mistake in MVP; source: tutor | static)
 // perf_sample (5 s) { fps, frameMsP95, inferenceMsP50, inferenceMsP95, e2eMsP50, jitterNorm, delegate, path: "worker" | "main_thread_fallback" | null }
-// device_info (once){ ua, gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // gpuTier null in the prototype: no GPU fingerprinting yet; decide before the pilot. Mouse arm: cameraWidth/cameraHeight null, workerPath false and meaningless
+// device_info (once){ gpuTier, cameraWidth, cameraHeight, workerPath: boolean }   // no user agent (dropped 2026-10-29: fingerprinting risk, no metric needs it; perf_sample.delegate and path carry the performance context); gpuTier null in the prototype: no GPU fingerprinting yet; decide before the pilot. Mouse arm: cameraWidth/cameraHeight null, workerPath false and meaningless
 ```
 
 Rules the schema enforces: no landmark coordinates anywhere; `grab_move` is summarised per drag, not per frame (a cursor trail would reconstruct hand motion and is a privacy and volume problem); neither tutor text nor the `SceneState` request enters the research log; the consent-gated `request_json` and `delivered_text` live only in the `ai_interactions` table in [09-database.md](09-database.md), written server-side by the route handler, and are joined to the event log through `tutor_message.interactionId`; `drop` carries no position. The tutor runs inside the `/api/tutor` route handler with no third-party egress ([07-ai-tutor.md](07-ai-tutor.md)), so no tutor data leaves the researcher's own deployment.
@@ -222,7 +252,7 @@ flowchart LR
   G[Learning engine] -->|activity_* task_* hint_shown mastery_computed| L
   A[Tutor client on receipt] -->|tutor_message metadata| L
   M[Mouse adapter] -->|same interaction events| S
-  L -->|batch POST every 10 s or 50 events| R[Route handler api research events]
+  L -->|batch POST every 10 s or 50 events| R["Route handler /api/events"]
   L -->|session end| D[JSON download fallback]
   R --> P[(Postgres event_logs)]
 ```
@@ -241,13 +271,24 @@ Requirements on [09-database.md](09-database.md). Table names follow the glossar
 
 | Table | Purpose | Key columns | Tier |
 |---|---|---|---|
-| `research_sessions` | one row per study session | `id` (= client-generated `sessionId`, validated by the server), `assignment_code`, `condition`, `study_phase` (`pilot` / `main`), `consent_version`, `started_at`, `ended_at`, `calibration_accuracy`, `s2_completed` | **MVP** |
+| `research_sessions` | one row per study session | `id` (= client-generated `sessionId`, validated by the server), `participant_code` (random 6 characters, shown to the learner on the results screen; the key for deletion and export), `assignment_code`, `condition`, `study_phase` (`dev` / `pilot` / `main`; `dev` rows are excluded from every analysis and purged freely, as in [09-database.md](09-database.md)), `consent_version`, `started_at`, `ended_at` (results reached; independent of logging consent), `skipped_task_ids` (for resume), `calibration_accuracy`, `s2_completed` | **MVP** |
 | `event_logs` | append-only event stream | `id`, `session_id`, `seq`, `t`, `type`, `payload` JSONB; unique on `(session_id, seq)` | **MVP** |
 | `instrument_responses` | tests and questionnaires | `id`, `session_id`, `instrument` (`pre` / `post` / `retention` / `sus` / `tlx` / `satisfaction` / `open`), `form` (A/B/C), `item_no`, `response`, `correct` | **MVP** |
-| `consent_records` | proof of consent without identity | `id`, `session_id`, `consent_version`, `agreed_at`, `withdrawn_at` | **MVP** |
+| `consent_records` | proof of consent without identity; kept after withdrawal with `withdrawn_at` set (no foreign key to the deleted session) | `id`, `session_id`, `consent_version`, `consent_logging`, `consent_tutor_payloads` (false until the tutor ships), `agreed_at`, `withdrawn_at` | **MVP** |
 | `users` linkage | optional join from an account to sessions | `research_sessions.user_id` nullable, separable, never required | **V1** |
 
-Constraints: no table holds a name, email or free-text identity; `event_logs.payload` is validated against the contracts above at the route handler; `DELETE /api/session/:id` cascades across all research tables, as listed in [09-database.md](09-database.md), and is callable with the `sessionId` alone; the matching export endpoint returns all research tables for one session as JSON. The MVP `lesson_attempts` table (and the V1 `progress` table) may be populated from the same events, but the research log is the system of record for the study.
+Constraints: no table holds a name, email or free-text identity. `event_logs.payload` is checked at the route handler by one generic rule (at most 16 keys, scalar values only, strings ≤ 300 characters, no `ua` key); the per-type contracts above are not yet enforced there, and the metrics script tolerates missing keys by returning `null`. Events are accepted only for a session whose consent record has `consent_logging` true and no `withdrawn_at` (403 otherwise).
+
+Deletion and export (roadmap step 4.6, built 2026-10-29), all **MVP**, shared code in `packages/db/src/privacy.ts`:
+
+| Who | Delete | Export |
+|---|---|---|
+| Participant, from the browser that created the session | `DELETE /api/session/:id` (`:id` must equal the session cookie, else 403) | `GET /api/session/:id/export` (same rule) |
+| Researcher, on a participant's request | `pnpm research:delete <participantCode | sessionCode | sessionId>\|<participantCode | sessionCode | sessionId>` | `pnpm research:export <participantCode | sessionCode | sessionId>\|<participantCode | sessionCode | sessionId>` |
+
+Deletion runs in one transaction: it stamps `withdrawn_at` on the consent record, then deletes the `research_sessions` row, which cascades to `event_logs`, `lesson_attempts`, `instrument_responses` and `ai_interactions` ([09-database.md](09-database.md)). The consent record stays as proof that the request was honoured. Export returns those six tables for one session as one JSON document.
+
+`lesson_attempts` is research data, not only resume state. It is written for every consented session whether or not the learner opted in to the event log, because resume depends on it. It holds each graded attempt (task, outcome, score, hints used, duration, the component and socket chosen), so RQ1 task-level outcomes and RQ2 attempt counts exist for every participant; RQ2 process metrics that need the event stream (time to first attempt, orbit use, tracking loss, engagement) exist only for participants who opted in. The consent text discloses this ("your answers in the lesson" are recorded; the action log is the separate opt-in). Analyses report the opt-in rate by condition, because a condition difference in opt-in would bias every event-log metric. For opted-in sessions the event log is the system of record and the metrics script checks that it agrees with `lesson_attempts`.
 
 ### 6.4 Logger transport
 
@@ -265,13 +306,13 @@ These are design requirements that [15-risks-security-scalability.md](15-risks-s
 
 | Requirement | Specification | Tier |
 |---|---|---|
-| No video storage | Frames go `getUserMedia → ImageBitmap → worker → discard`. Nothing is written to disk, IndexedDB, canvas capture or network. Verified by a test that intercepts `fetch`, `sendBeacon` and IndexedDB during a lesson | **MVP** |
-| Landmarks never persisted | Landmarks exist only in worker memory for the current frame. The logger type system has no landmark field. The calibration tutorial and jitter metric compute derived scalars in the worker | **MVP** |
+| No video storage | Frames go `getUserMedia → ImageBitmap → worker → discard`. Nothing is written to disk, IndexedDB, canvas capture or network. Verified (doc 12 A20) by `apps/web/lib/privacy.test.ts`: a static scan that allows network calls only from four named files and finds no `indexedDB`, `MediaRecorder`, `captureStream` or canvas export anywhere in the app and packages; and a scripted drag with tracking loss run through the real logger and transport with `fetch` and `sendBeacon` intercepted, asserting that every body is scalar JSON with no landmark-like key or number array, and that nothing is sent without logging consent. **V1**: full-page interception of a live lesson (Playwright) | **MVP** |
+| Landmarks never persisted | Landmarks are computed in the worker. For the learner's own preview only, the lesson page asks the worker (`showHands`) to post each frame's landmarks to the main thread, where `camera-preview.tsx` draws them over the video and drops them; they never reach the lesson state, the logger or the network, and are gone by the next frame. The logger type system has no landmark field and the route handler accepts scalar payloads only. The calibration tutorial and jitter metric compute derived scalars in the worker | **MVP** |
 | Pseudonymous session key | `sessionId` is a client-generated UUID, validated (format, uniqueness) and recorded by the server on first contact. The link to a person (consent form, S2 contact) is a paper or offline encrypted key held by the researcher, never stored in the app or database | **MVP** |
-| Consent before camera | The consent screen precedes the `getUserMedia` prompt. Consent version is recorded. Declining routes to a plain exit screen; the lesson never starts without consent | **MVP** |
+| Consent before camera | `/consent` shows the versioned text (`CONSENT_VERSION = "pilot-v1"` in `apps/web/lib/consent.ts`, from the `research-protocol` skeleton) before the lesson page, which is the only study page that opens the camera (the developer page `/prototype` also opens it without consent, so production builds answer 404 there), and only when the learner presses "Start camera". Agreeing to take part is required; logging the action log is a separate checkbox, unticked by default. Without it the client drops every event and `/api/events` refuses them (403). Agreeing creates the session and its consent record in one transaction. Declining shows a plain exit screen and stores nothing. A lesson URL opened without a consented session redirects to `/consent` | **MVP** |
 | Visible camera status | Camera preview thumbnail and a tracking-active indicator are always on screen; a one-key camera-off control stops the stream and ends tracking immediately (UX in [11-ui-ux.md](11-ui-ux.md)) | **MVP** |
-| Deletion on request | Participant quotes their `sessionId` (shown at session end and on the consent copy); the researcher calls the delete endpoint; confirmation returned within 7 days | **MVP** |
-| Export on request | Same endpoint family returns the participant's data as JSON | **MVP** |
+| Deletion on request | The participant code is shown on the results screen; the consent text tells the participant to quote it. The researcher runs `pnpm research:delete <code>` with that code, or with the session code they assigned (e.g. `PG-014`) when the participant stopped before the results screen; the participant's own browser can also call `DELETE /api/session/:id`. Both delete every research row and keep the consent record with `withdrawn_at` (6.3). Confirmation returned within 7 days | **MVP** |
+| Export on request | `pnpm research:export <code>` for the researcher, `GET /api/session/:id/export` for the participant's own browser; one JSON document of the six tables (6.3) | **MVP** |
 | Retention period | Logs and instrument responses retained 5 years after publication, then deleted; stated in the consent form | **MVP** |
 | Institutional approval | Required before any data intended for publication is collected; a hobby pilot with friends still uses the full consent form and data rules | **MVP** |
 | Minors | Parental consent plus child assent, separate approval, age-appropriate consent text; not before **V1** | **V1** |
@@ -284,18 +325,18 @@ The consent text skeleton in the `research-protocol` skill is the baseline; the 
 
 | Item | Owner doc | Tier |
 |---|---|---|
-| Consent screen with version stamp, shown before camera permission | 11, 03 | **MVP** |
-| Condition selection by pre-assigned session code (researcher types the code from the offline randomisation list; app derives `condition`, generates the `sessionId`, records both) | 03 | **MVP** |
+| Consent screen with version stamp, shown before camera permission. Built 2026-10-29 (step 4.6), section 7 | 11, 03 | **MVP** |
+| Condition selection by pre-assigned session code (researcher types the code from the offline randomisation list; app derives `condition`, generates the `sessionId`, records both). Built 2026-10-29 (step 4.6), section 3.2 | 03 | **MVP** |
 | Calibration tutorial with 20 scripted prompts emitting `calibration_prompt` and `gesture_emit`; mouse equivalent with 20 click-and-drag prompts for timing parity | 04, 11 | **MVP** |
 | Mouse adapter producing the identical interaction-event stream | 05 | **MVP** |
 | Event logger with batching, `seq`, `sendBeacon` on unload, and end-of-session JSON download | 03 | **MVP** |
-| Route handler validating payload contracts and writing to `event_logs` | 03, 09 | **MVP** |
+| Route handler validating payloads and writing to `event_logs` (generic scalar check built; per-type contracts pending, to add before the pilot freezes the payload contract) | 03, 09 | **MVP** |
 | In-app pre/post test, SUS, TLX, satisfaction screens writing to `instrument_responses`, with form A/B/C selectable | 11 | **MVP** |
 | Online retention test page keyed by `sessionId` | 11 | **MVP** |
 | Three 15-item knowledge forms, piloted for equivalence | research materials, Phase E | **MVP** |
-| Delete and export endpoints keyed by `sessionId` | 03, 09 | **MVP** |
+| Delete and export, by the participant's own cookie (`sessionId`) and by the researcher (`participant_code`). Built 2026-10-29 (step 4.6), section 6.3 | 03, 09 | **MVP** |
 | Soft time prompt at 15 min of lesson time offering the choice to proceed to the assessment, emitting `time_prompt`; no hard cap; assessment always runs in full | 06 | **MVP** |
-| A metrics script that reads `event_logs` and `instrument_responses` for one session and prints every metric in section 2; this is the test that the log "reconstructs each attempt without ambiguity" | Phase E | **MVP** |
+| A metrics script that reads `event_logs` and `instrument_responses` for one session and prints every metric in section 2; this is the test that the log "reconstructs each attempt without ambiguity". Built 2026-10-29 (step 4.7): `pnpm research:metrics`, with the simplifications and checks in section 2.5 | Phase E | **MVP** |
 
 Not needed for the pilot: accounts, dashboards, `misfire_report`, data-residency controls, parental consent flow.
 

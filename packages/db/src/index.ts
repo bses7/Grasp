@@ -4,3 +4,6 @@
  */
 export * from "./schema";
 export * from "./client";
+export * from "./privacy";
+/** Query operators re-exported so route handlers use the same drizzle-orm instance as the schema. */
+export { and, asc, desc, eq, isNull, max, sql } from "drizzle-orm";

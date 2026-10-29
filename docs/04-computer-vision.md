@@ -53,7 +53,7 @@ Eight-point checklist for MediaPipe `HandLandmarker`:
 | 2 | Limitations | `z` is relative and noisy; degrades with backlighting, occlusion, hands near frame edge; thresholds not exposed per gesture, so classification is ours |
 | 3 | Performance | 12–20 ms per frame on iGPU with GPU delegate; competes with R3F unless moved to a worker |
 | 4 | Accessibility | Gesture input is unusable for some learners; every gesture has a mouse and keyboard equivalent (see [05](05-3d-interaction.md) and [11](11-ui-ux.md)) |
-| 5 | Privacy | Frames processed in memory, discarded per frame; only events logged, with consent |
+| 5 | Privacy | Frames processed in memory, discarded per frame; only events logged, with consent. Raw landmarks reach the main thread one frame at a time for the camera preview overlay only, drawn and dropped ([landmark preview overlay](#landmark-preview-overlay)) |
 | 6 | Scalability | Zero server cost per user; cost is the learner's CPU/GPU |
 | 7 | Complexity | Low: init pattern in `mediapipe-hands` section 2, one `detectForVideo` call per frame |
 | 8 | Necessary? | Yes for the gesture condition. Simpler alternative is mouse-only, which is the research control condition and ships regardless |
@@ -99,6 +99,7 @@ Locked position 3 fixes the **MVP** set: `open_palm` (neutral cursor), `point` (
 | `swipe` | **V1** | Velocity gestures trigger during ordinary repositioning; navigation has HUD buttons in MVP |
 | `wrist_rotate` | **V1** | Depends on `palmNormal`, which depends on noisy `z`; sockets snap rotation so MVP tasks do not need it |
 | `two_hand_scale` | **V1** | Doubles inference cost and failure surface; model scale has no learning value in the heart lesson |
+| `two_hand_explode` | **V1** | Both hands pinching, apart explodes and together reassembles; deferred 2026-10-29 because locked position 3 fixes five MVP gestures, two visible hands roughly double inference, and the explode pose is already reachable by HUD button and X key (the mouse-condition equivalent); confusable with `two_hand_scale` (two pinches, changing distance), so before building it needs a separation rule (e.g. explode only while no component is grabbed, or drop one of the two) plus the same both-pinches-within-500-ms and same-person constraints |
 | Pose-based gestures | **Future** | Pose tracking is Future per locked position 2 |
 
 Challenge to the brief: listing "grab" and "rotate" alongside "pinch" and "wrist rotation" as separate gestures conflates gesture (hand shape) with interaction event (scene intent). This doc keeps them separate because the same `pinch` yields `grab_start` over a component and orbit over empty space, and the learning engine evaluates intents, not hand shapes.
@@ -168,6 +169,22 @@ type CvStatus = {                                              // separate chann
 ```
 
 The main thread sends one message type back to the worker: `{ type: "hover_result", hoveredId: string | null, isGrabbable: boolean, t: number }`, so the worker can apply the grabbable-under-cursor rule without owning scene knowledge. The worker never sees the scene graph.
+
+### Landmark preview overlay
+
+Decision (user request 2026-10-29): the lesson camera preview draws the MediaPipe hand landmarks (bones and points) over the mirrored video, so the learner sees what is tracked. **MVP** (listed in [12](12-mvp-definition.md)). This reverses the earlier rule that landmarks stay in the worker (the M1 skeleton overlay was removed for that reason): they now cross to the main thread one frame at a time, for display only.
+
+| Aspect | Rule |
+|---|---|
+| Opt-in | `StartVisionOptions.showHands` (`packages/vision/src/worker-client.ts`), carried in the worker `init` message; off by default. Only `apps/web/components/hud/camera-preview.tsx` sets it; the `/prototype` camera panel does not and ignores the message |
+| Message | `{ type: "hands", hands: HandLandmarks[] }` on the worker's outbound channel, once per inferred frame; the main-thread fallback posts the same shape. It is not an interaction event and is not part of the contract with [05](05-3d-interaction.md) |
+| Content | `PipelineOutput.hands` (`pipeline.ts`): raw, unsmoothed 21-point landmarks of every hand above the 0.6 presence floor, including a second hand and hands rejected as too far or too close. An empty array clears the overlay |
+| Handling | Drawn by `drawHands` (`landmarker.ts`, plain `{x, y, z}` points) on a canvas mirrored like the video, then dropped. Never forwarded to the lesson, scene, logger, or network |
+| Cost | One structured clone of up to 2 × 21 points per frame, plus one 2D canvas clear and draw on the main thread; negligible against the 33 ms budget, unmeasured |
+
+Limitations: the overlay shows raw landmarks, so it jitters more than the smoothed cursor and can show a hand that drives no gestures (too far, too close, or not primary). That is intended: it shows what MediaPipe sees, not what the FSM decided. Privacy: landmarks are biometric-adjacent; the guarantee now rests on the main-thread consumer dropping them, not on the worker boundary. Any future consumer that stores or sends `hands` messages breaks the logging rule below.
+
+Checklist: (1) appropriate because a learner who can see the tracked skeleton self-corrects distance and lighting faster than from text hints; (2) raw, unsmoothed, possibly non-primary hands; (3) one clone and one canvas draw per frame; (4) decorative, `aria-hidden`; the `cv_status` hints remain the accessible signal; (5) landmarks stay in the tab and are never persisted; (6) client-only; (7) about 20 lines; (8) not strictly necessary, the cursor dot alone is the simpler alternative, kept off by default in the library.
 
 ## Smoothing: One-Euro filter and hysteresis
 
@@ -306,7 +323,7 @@ Every threshold above is provisional. Logging follows the `LogEvent` schema in t
 | Multi-person rule | Primary-hand switches per session | `hand_count.n`, `hand_count.primarySwitched` |
 | Inference budget | Inference p50/p95, fps, worker versus fallback path | `perf_sample.inferenceMsP50`, `inferenceMsP95`, `frameMsP95`, `fps`, `perf_sample.path` |
 
-A development-only `gesture_debug` stream (per-frame features, no landmarks) can be enabled behind a flag for the developer's own sessions; it is never enabled for participants. The CV metric definitions (gesture accuracy, precision, recall, false-positive rate, tracking stability, latency) and how they are computed from these fields are owned by [14-evaluation-methodology.md](14-evaluation-methodology.md); the occlusion, lighting, hand-size, multi-person, latency, ambiguity, and depth risks are in [15-risks-security-scalability.md](15-risks-security-scalability.md).
+A development-only `gesture_debug` stream (per-frame features, no landmarks) can be enabled behind a flag for the developer's own sessions; it is never enabled for participants. The per-frame `hands` messages that feed the [landmark preview overlay](#landmark-preview-overlay) are display-only and must never be logged. The CV metric definitions (gesture accuracy, precision, recall, false-positive rate, tracking stability, latency) and how they are computed from these fields are owned by [14-evaluation-methodology.md](14-evaluation-methodology.md); the occlusion, lighting, hand-size, multi-person, latency, ambiguity, and depth risks are in [15-risks-security-scalability.md](15-risks-security-scalability.md).
 
 ## Open questions
 

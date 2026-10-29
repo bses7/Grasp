@@ -94,6 +94,7 @@ function checkLesson(l: Lesson, rel: string, manifests: Map<string, ModelManifes
   if (l.estimatedMinutes < 5 || l.estimatedMinutes > 20) fail(rel, `estimatedMinutes ${l.estimatedMinutes} outside 5-20`);
   for (const a of l.activities) {
     for (const card of a.narration ?? []) if (card.length > MAX_NARRATION) fail(rel, `${a.id}: narration card over ${MAX_NARRATION} chars`);
+    if (a.scene?.pose && !(a.scene.pose in m.poses)) fail(rel, `${a.id}: pose ${a.scene.pose} is not in the manifest`);
     for (const t of a.tasks) {
       if (!objectives.has(t.objectiveId)) fail(rel, `${t.id}: unknown objective ${t.objectiveId}`);
       if (a.kind !== "introduction") taught.add(t.objectiveId);
@@ -101,6 +102,7 @@ function checkLesson(l: Lesson, rel: string, manifests: Map<string, ModelManifes
       for (const h of t.hints) {
         if (h.tutor && !h.text && !h.highlight) fail(rel, `${t.id}: tutor hint needs text or highlight as fallback`);
         for (const id of h.highlight ?? []) if (!components.has(id)) fail(rel, `${t.id}: hint ${h.level} highlights ${id}, not a component id`);
+        if (h.cameraTo && !components.has(h.cameraTo) && !m.hotspots.some((x) => x.id === h.cameraTo)) fail(rel, `${t.id}: hint ${h.level} cameraTo ${h.cameraTo} is not a component or hotspot`);
       }
       switch (t.type) {
         case "identify":

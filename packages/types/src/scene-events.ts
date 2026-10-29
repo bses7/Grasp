@@ -68,6 +68,12 @@ export type SceneCommand =
   | { type: "setSocketVisual"; socketId: string; visual: SocketVisual }
   | { type: "setVisible"; ids: string[]; visible: boolean }
   | { type: "reset" }
+  /**
+   * Worked example (doc 06 remediation): the part pulses and, given a socket, tweens into it and back to where
+   * it was; occupancy never changes and no scene event is emitted. Reduced motion: a static highlight, and the
+   * part jumps into the socket and back with no tween.
+   */
+  | { type: "demonstrate"; componentId: string; socketId?: string }
   /** V1: named clip from the manifest animations[]. */
   | { type: "playAnimation"; animationId: string };
 

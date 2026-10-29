@@ -21,7 +21,7 @@
         "pose": "start",
         "socketsVisible": true,
         "socketVisual": "ring",
-        "allowOrbit": false,
+        "allowOrbit": true,
         "allowGrab": true
       },
       "tasks": [

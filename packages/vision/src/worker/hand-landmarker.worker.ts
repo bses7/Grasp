@@ -7,6 +7,7 @@
 
 import type { CvStatus, HoverResult, InteractionEvent } from "@grasp/types";
 import type { GestureFeatures } from "../gesture-fsm";
+import type { HandLandmarks } from "../landmarks";
 import type { LandmarkerDelegate } from "../landmarker";
 import { VisionPipeline } from "../pipeline";
 
@@ -17,6 +18,8 @@ export type InitMessage = {
   readonly type: "init";
   /** Developer fixture recorder (doc 17 M3): also post per-frame features. Never set in a study build. */
   readonly debugFeatures?: boolean;
+  /** Also post each frame's landmarks for the on-screen preview overlay (display only, never logged). */
+  readonly showHands?: boolean;
 };
 
 /** One camera frame; the bitmap is transferred, never copied, and closed after inference. */
@@ -38,7 +41,8 @@ export type WorkerControl =
   | { readonly type: "error"; readonly message: string }
   /** One per frame message, after its events; releases the client's one-frame-in-flight slot. */
   | { readonly type: "frame_done"; readonly t: number; readonly inferenceMs: number; readonly jitter: number | null }
-  | { readonly type: "features"; readonly t: number; readonly f: GestureFeatures | null };
+  | { readonly type: "features"; readonly t: number; readonly f: GestureFeatures | null }
+  | { readonly type: "hands"; readonly hands: HandLandmarks[] };
 
 export type WorkerOutbound = InteractionEvent | CvStatus | WorkerControl;
 
@@ -48,11 +52,13 @@ function post(message: WorkerOutbound): void {
 
 let pipeline: VisionPipeline | null = null;
 let debugFeatures = false;
+let showHands = false;
 
 self.onmessage = async (event: MessageEvent<WorkerInbound>): Promise<void> => {
   const message = event.data;
   if (message.type === "init") {
     debugFeatures = message.debugFeatures ?? false;
+    showHands = message.showHands ?? false;
     try {
       pipeline = await VisionPipeline.create();
       post({ type: "ready", delegate: pipeline.delegate });
@@ -70,6 +76,7 @@ self.onmessage = async (event: MessageEvent<WorkerInbound>): Promise<void> => {
       const out = pipeline.process(bitmap, t);
       for (const m of out.messages) post(m);
       if (debugFeatures) post({ type: "features", t, f: out.features });
+      if (showHands) post({ type: "hands", hands: out.hands });
       ({ inferenceMs, jitter } = out);
     } catch (err) {
       post({ type: "error", message: err instanceof Error ? err.message : String(err) });

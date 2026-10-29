@@ -2,10 +2,11 @@
  * Database client factory. postgres.js driver for local Docker Postgres and Neon over TCP (doc 09 "Postgres hosting").
  * The only callers are apps/web route handlers and scripts/; packages never open connections (doc 16, Package boundaries).
  */
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type * as schema from "./schema";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema";
 
-export type Db = PostgresJsDatabase<typeof schema>;
+export type Db = PostgresJsDatabase<typeof schema> & { $client: postgres.Sql };
 
 export type DbClientOptions = {
   /** Postgres connection string; from DATABASE_URL. */
@@ -14,14 +15,13 @@ export type DbClientOptions = {
   maxConnections?: number;
 };
 
-/** Creates a Drizzle client over postgres.js. Doc 09; Phase D after M11 (first persistence milestone). */
-export function createDb(options: DbClientOptions): Db {
-  void options;
-  throw new Error("TODO Phase D: createDb");
+/** Creates a Drizzle client over postgres.js. Doc 09. */
+export function createDb({ connectionString, maxConnections = 1 }: DbClientOptions): Db {
+  // connect_timeout: a missing local Postgres fails fast, so the lesson falls back to running unsaved.
+  return drizzle(postgres(connectionString, { max: maxConnections, connect_timeout: 3 }), { schema });
 }
 
-/** Closes the underlying pool; scripts call this before exit. Doc 09; Phase D after M11. */
+/** Closes the underlying pool; scripts call this before exit. */
 export async function closeDb(db: Db): Promise<void> {
-  void db;
-  throw new Error("TODO Phase D: closeDb");
+  await db.$client.end();
 }

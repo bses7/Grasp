@@ -87,6 +87,7 @@ export const ActivityCompletionSchema = z.union([
   z.object({ allTasks: z.literal(true) }),
   z.object({ minCorrect: z.number().int().min(1) }),
   z.object({ time: z.number().positive() }),
+  z.object({ continue: z.literal(true) }),
 ]);
 
 export const HintLevelSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);

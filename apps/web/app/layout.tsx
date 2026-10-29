@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Fraunces, Inter } from "next/font/google";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 import "./globals.css";
@@ -9,17 +10,19 @@ export const metadata: Metadata = {
     "Learn by manipulating 3D educational models with webcam hand gestures.",
 };
 
+// Self-hosted at build time: the browser never contacts Google (doc 11 type scale; CSP stays same-origin).
+const fraunces = Fraunces({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-fraunces" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
 /**
- * Root layout. Dark theme is the default because the lesson environment is a
- * 3D scene (docs/11); text screens switch to data-theme="light" per page.
+ * Root layout. One light "Heart studio" theme on every screen (docs/11).
  * Every page renders per request: the CSP nonce from proxy.ts only exists at request time, and a
  * statically prerendered page would ship un-nonced inline scripts that the CSP blocks (docs/15).
- * TODO Phase D M5: add the providers from components/providers once stores exist.
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await connection();
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body className="min-h-screen">{children}</body>
     </html>
   );

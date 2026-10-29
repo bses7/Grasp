@@ -42,6 +42,8 @@ function newRunner() {
 /** Doc 11 feedback copy; the outcome itself comes from the engine. */
 function feedbackText(v: Verdict): string {
   const out = v.result.feedback.outcome;
+  if (v.next === "remediate") return "Let's look at this together. Watch where it goes, then try the next step.";
+  if (v.micro) return "Now try the original task again.";
   const tail = v.next === "next_task" && out !== "correct" ? " Out of attempts, moving on." : "";
   if (out === "correct") return `${nameOf(v.componentId)} is in the right place.`;
   if (out === "partial") return `Right part, wrong place. Try another spot.${tail}`;
@@ -114,7 +116,7 @@ export function PrototypeClient() {
     if (started.current === log) return; // React dev double-mount
     started.current = log;
     if (input === "mouse") {
-      log.log("device_info", { ua: navigator.userAgent, gpuTier: null, cameraWidth: null, cameraHeight: null, workerPath: false }, performance.now());
+      log.log("device_info", { gpuTier: null, cameraWidth: null, cameraHeight: null, workerPath: false }, performance.now());
     }
     logTaskStart(runner.current!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,7 +146,7 @@ export function PrototypeClient() {
 
   function cardFor(r: TaskRunner, feedback: FeedbackCardProps["feedback"]): FeedbackCardProps {
     const task = r.task;
-    const n = task ? r.attempts.filter((a) => a.taskId === task.id).length : 0;
+    const n = r.attemptsUsed;
     return { prompt: task?.prompt ?? null, attempt: task && r.activity ? { n, max: maxAttemptsFor(r.activity, task) } : null, feedback };
   }
 
@@ -201,7 +203,22 @@ export function PrototypeClient() {
         },
         e.t,
       );
-      if (verdict.next !== "retry") {
+      if (verdict.hint) {
+        log.log("hint_shown", { taskId: task.id, level: verdict.hint.level, source: "static" }, e.t);
+        if (verdict.hint.highlight) scene.current?.apply({ type: "highlight", ids: verdict.hint.highlight });
+        if (verdict.hint.cameraTo) scene.current?.apply({ type: "cameraTo", target: verdict.hint.cameraTo });
+      }
+      if (verdict.remediation) {
+        // ponytail: worked example = turn to the part the failed task wanted and pulse it; a part tweening
+        // into its socket and back needs a scene command doc 05 does not have yet (add with the lesson page, 4.4).
+        const ex = verdict.remediation.workedExample.expect as { componentId?: string };
+        if (ex.componentId) {
+          scene.current?.apply({ type: "cameraTo", target: ex.componentId });
+          scene.current?.apply({ type: "highlight", ids: [ex.componentId] });
+        }
+        logTaskStart(runner.current!); // the micro-task
+      }
+      if (verdict.next === "next_task" || verdict.next === "next_activity" || verdict.next === "lesson_complete") {
         log.log("task_end", { taskId: task.id, outcome: result.correct ? "correct" : "incorrect" }, e.t);
         logTaskStart(runner.current!);
       }
@@ -247,6 +264,8 @@ export function PrototypeClient() {
             pose={activityScene.pose}
             socketVisual={activityScene.socketVisual}
             allowGrab={activityScene.allowGrab}
+            allowOrbit={activityScene.allowOrbit}
+            visibleComponents={activityScene.visibleComponents}
             assetBaseUrl={ASSET_BASE_URL}
             dracoDecoderPath={DRACO_DECODER_URL}
             viewport={VIEWPORT}
@@ -321,7 +340,7 @@ export function PrototypeClient() {
             if (h && camera) {
               L().log(
                 "device_info",
-                { ua: navigator.userAgent, gpuTier: null, cameraWidth: camera.width, cameraHeight: camera.height, workerPath: h.path === "worker" },
+                { gpuTier: null, cameraWidth: camera.width, cameraHeight: camera.height, workerPath: h.path === "worker" },
                 performance.now(),
               );
             }

@@ -25,13 +25,17 @@ export class SessionLogger {
   /**
    * @param t0 the session start on the same clock as every `now` passed later (performance.now)
    * @param sink optional extra consumer per event (the network LogBuffer at Phase 4)
+   * @param firstSeq where `seq` starts: 0 for a new session, the next free number when a reload resumes one
    */
   constructor(
     readonly sessionId: string,
     readonly condition: StudyCondition,
     private readonly t0: number,
     private readonly sink?: (e: LogEvent) => void,
-  ) {}
+    firstSeq = 0,
+  ) {
+    this.seq = firstSeq;
+  }
 
   log(type: LogEventType, payload: LogPayload, now: number): LogEvent {
     const e: LogEvent = { sessionId: this.sessionId, condition: this.condition, seq: this.seq++, t: Math.round(now - this.t0), type, payload };

@@ -1,7 +1,11 @@
 /**
- * Prints the contentHash (SHA-256 over canonical lesson plus manifest JSON) for every lesson under content/lessons.
- * The build writes the same value into the bundle; rows in research_sessions and lesson_attempts store it as
- * lesson_hash so a participant's session is pinned to exact content. Doc 10 "Content versioning", doc 09; Phase D after M11.
+ * Prints the contentHash (SHA-256 over canonical lesson plus manifest JSON) for every lesson. The session route
+ * computes the same value and stores it as lesson_hash on research_sessions and lesson_attempts, so a
+ * participant's session is pinned to exact content. Doc 10 "Content versioning", doc 09.
  */
-console.log("TODO Phase D: compute contentHash per lesson and manifest (doc 10)");
-process.exit(0);
+import { contentHash, LESSON_IDS, loadLesson, loadManifest } from "../../packages/content/src/loaders";
+
+for (const id of LESSON_IDS) {
+  const lesson = loadLesson(id);
+  console.log(`${await contentHash(loadManifest(lesson.modelId), lesson)}  ${id}`);
+}

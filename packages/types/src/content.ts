@@ -78,7 +78,7 @@ export type ActivityScene = {
   dragMode?: DragMode;
 };
 
-export type ActivityCompletion = { allTasks: true } | { minCorrect: number } | { time: number };
+export type ActivityCompletion = { allTasks: true } | { minCorrect: number } | { time: number } | { continue: true };
 
 export type Activity = {
   id: string;

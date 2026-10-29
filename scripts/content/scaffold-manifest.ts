@@ -14,6 +14,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Component, ModelManifest, Socket, Vec3 } from "@grasp/types";
+import { formatJson } from "./format-json";
 
 const args = process.argv.slice(2);
 const glbPath = args.find((a) => a.endsWith(".glb"));
@@ -108,26 +109,7 @@ const manifest = {
   ),
 };
 
-/** Like JSON.stringify(v, null, 2), but any array or object that fits in ~100 columns stays on one line. */
-function format(v: unknown, indent = ""): string {
-  const inline = (x: unknown): string =>
-    Array.isArray(x)
-      ? `[${x.map(inline).join(", ")}]`
-      : x && typeof x === "object"
-        ? Object.keys(x).length
-          ? `{ ${Object.entries(x).map(([k, y]) => `${JSON.stringify(k)}: ${inline(y)}`).join(", ")} }`
-          : "{}"
-        : JSON.stringify(x);
-  const one = inline(v);
-  if (!v || typeof v !== "object" || indent.length + one.length <= 100) return one;
-  const inner = `${indent}  `;
-  const lines = Array.isArray(v)
-    ? v.map((x) => inner + format(x, inner))
-    : Object.entries(v).map(([k, x]) => `${inner}${JSON.stringify(k)}: ${format(x, inner)}`);
-  return Array.isArray(v) ? `[\n${lines.join(",\n")}\n${indent}]` : `{\n${lines.join(",\n")}\n${indent}}`;
-}
-
-writeFileSync(manifestPath, `${format(manifest)}\n`);
+writeFileSync(manifestPath, `${formatJson(manifest)}\n`);
 console.log(`wrote ${manifestPath}: ${manifest.components.length} components, ${manifest.sockets.length} sockets`);
 console.log(`scenery (rendered, not interactable): ${scenery.join(", ") || "none"}`);
 if (missingComponents.length || missingSockets.length) {

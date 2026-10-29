@@ -3,8 +3,8 @@ import { create } from "zustand";
 /**
  * sessionStore (docs/03 "State management"): sessionId, condition, consent
  * flags, camera permission state. Updated rarely; read by HUD, logger, API
- * clients. The logger drops everything while consent.logging is false.
- * TODO Phase D, doc 13 Phase 4: populate from POST /api/session.
+ * clients. Unused so far: the lesson page reads consent from its POST /api/session response (boot.consentLogging),
+ * which gates the logger (doc 03 "State management").
  */
 export type StudyCondition = "gesture" | "mouse";
 

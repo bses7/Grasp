@@ -9,7 +9,7 @@
 
 export { evaluate } from "./evaluate";
 export { countsAsAttempt } from "./counts-as-attempt";
-export { computeMastery } from "./mastery";
+export { computeMastery, isLessonMastered, isUnlocked } from "./mastery";
 export type { MasteryByObjective } from "./mastery";
 export { nextHint, MAX_HINT_LEVEL, FALLBACK_HINT_TEMPLATE } from "./hints";
 export {
@@ -24,9 +24,11 @@ export {
   nextActivity,
 } from "./sequencing";
 export { TaskRunner } from "./task-runner";
-export type { TaskRunnerOptions, Verdict } from "./task-runner";
+export type { Remediation, TaskRunnerOptions, Verdict } from "./task-runner";
 export { REMEDIATION_SEQUENCE, RETRY_HINTS_USED, shouldRemediate, synthesiseMicroTask } from "./remediation";
 export type { RemediationStep } from "./remediation";
 export { LogBuffer, FLUSH_INTERVAL_MS, FLUSH_BATCH_SIZE } from "./log-buffer";
 export { SessionLogger, falseStartRate } from "./logger";
+export { sessionMetrics } from "./metrics";
+export type { InstrumentRow, SessionMetrics } from "./metrics";
 export type { LogTransport } from "./log-buffer";

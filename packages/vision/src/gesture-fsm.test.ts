@@ -155,3 +155,38 @@ describe.runIf(files.length > 0)("GestureFsm recorded fixtures", () => {
     }
   });
 });
+
+describe("GestureFsm HOVER (point, Phase 4 step 4.0)", () => {
+  const point = (): GestureFeatures => ({
+    ...hand(1.0),
+    extended: { index: true, middle: false, ring: false, pinky: false },
+    extendedCount: 1,
+    thumbExtended: false,
+  });
+  const pointing = (n: number) => repeat(n, point());
+
+  it("enters HOVER after 3 pointing frames and emits hover events there", () => {
+    const { fsm, events } = replay([...open(5), ...pointing(4)]);
+    expect(fsm.state).toBe("HOVER");
+    // open frames 3-5: cursor (IDLE after the NO_HAND hold); pointing frames 1-2: cursor (hold 3); 3-4: hover
+    expect(events.map((e) => e.type)).toEqual(["cursor", "cursor", "cursor", "cursor", "cursor", "hover", "hover"]);
+  });
+
+  it("one or two pointing frames do not leave IDLE", () => {
+    const { fsm, events } = replay([...open(5), ...pointing(2), ...open(2)]);
+    expect(fsm.state).toBe("IDLE");
+    expect(events.every((e) => e.type === "cursor")).toBe(true);
+  });
+
+  it("returns to IDLE after 3 open-palm frames", () => {
+    const { fsm, events } = replay([...open(5), ...pointing(4), ...open(3)]);
+    expect(fsm.state).toBe("IDLE");
+    expect(events.at(-1)!.type).toBe("cursor");
+  });
+
+  it("pinching from HOVER grabs, as from IDLE", () => {
+    const { types, fsm } = replay([...open(5), ...pointing(4), ...pinched(2)]);
+    expect(types).toContain("grab_start");
+    expect(fsm.state).toBe("GRABBING");
+  });
+});

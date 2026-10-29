@@ -1,4 +1,5 @@
-import type { AttemptRecord, Lesson, Objective } from "@grasp/types";
+import type { AttemptRecord, Lesson, Objective, Task } from "@grasp/types";
+import { ASSESSMENT_MASTERY_WEIGHT, GRADED_ACTIVITY_KINDS } from "./sequencing";
 
 /** Mastery per objective id; `null` means no graded task for that objective has an attempt yet. */
 export type MasteryByObjective = Record<string, number | null>;
@@ -22,15 +23,40 @@ export type MasteryByObjective = Record<string, number | null>;
  *
  * `lesson` is needed because normalisation divides by `task.scoring.correct`
  * and the weight depends on the activity kind, neither of which an attempt
- * record carries. Phase D (M8).
+ * record carries. Micro-task attempts (remediation, scored 0) are excluded.
  */
 export function computeMastery(
   attempts: AttemptRecord[],
   objectives: Objective[],
   lesson: Lesson,
 ): MasteryByObjective {
-  void attempts;
-  void objectives;
-  void lesson;
-  throw new Error("TODO Phase D: computeMastery (doc 06, doc 13 Phase 4)");
+  const graded: { task: Task; weight: number }[] = lesson.activities
+    .filter((a) => (GRADED_ACTIVITY_KINDS as readonly string[]).includes(a.kind))
+    .flatMap((a) => a.tasks.map((task) => ({ task, weight: a.kind === "assessment" ? ASSESSMENT_MASTERY_WEIGHT : 1 })));
+
+  const out: MasteryByObjective = {};
+  for (const o of objectives) {
+    let sum = 0;
+    let weights = 0;
+    for (const { task, weight } of graded.filter((g) => g.task.objectiveId === o.id)) {
+      const latest = attempts
+        .filter((a) => a.taskId === task.id && !a.microTask)
+        .reduce<AttemptRecord | null>((best, a) => (!best || a.t >= best.t ? a : best), null);
+      if (!latest) continue; // not attempted: excluded, never a false 0
+      sum += Math.min(1, Math.max(0, latest.score / task.scoring.correct)) * weight;
+      weights += weight;
+    }
+    out[o.id] = weights ? sum / weights : null;
+  }
+  return out;
+}
+
+/** Every objective has mastery at or above its threshold (an untouched objective is not mastered). */
+export function isLessonMastered(mastery: MasteryByObjective, objectives: Objective[]): boolean {
+  return objectives.every((o) => (mastery[o.id] ?? -1) >= o.masteryThreshold);
+}
+
+/** unlock(lesson) = every lesson in `prerequisites` is mastered (doc 06). XP never enters this rule. */
+export function isUnlocked(lesson: Lesson, masteredLessonIds: ReadonlySet<string>): boolean {
+  return (lesson.prerequisites ?? []).every((id) => masteredLessonIds.has(id));
 }

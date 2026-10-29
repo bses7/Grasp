@@ -17,6 +17,7 @@ const LESSONS: Record<string, unknown> = {
 };
 
 export const MANIFEST_IDS = Object.keys(MANIFESTS);
+export const LESSON_IDS = Object.keys(LESSONS);
 
 /** Loads and validates content/models/<modelId>.json. Doc 10; Phase D at M9 (real heart GLB and manifest). */
 export function loadManifest(modelId: string): ModelManifest {
@@ -33,11 +34,18 @@ export function loadLesson(lessonId: string): Lesson {
 }
 
 /**
- * SHA-256 over the canonical JSON of lesson plus manifest; stored as lesson_hash on research_sessions
- * and lesson_attempts so a row pins the exact content a participant saw. Doc 10 "Content versioning", doc 09; Phase D after M11.
+ * SHA-256 (hex) over the canonical JSON (sorted keys) of lesson plus manifest; stored as lesson_hash on
+ * research_sessions and lesson_attempts so a row pins the exact content a participant saw. Doc 10 "Content
+ * versioning", doc 09. Web Crypto, so it runs in route handlers, scripts and the browser alike.
  */
-export function contentHash(manifest: ModelManifest, lesson: Lesson): string {
-  void manifest;
-  void lesson;
-  throw new Error("TODO Phase D: contentHash");
+export async function contentHash(manifest: ModelManifest, lesson: Lesson): Promise<string> {
+  const canonical = (v: unknown): string =>
+    Array.isArray(v)
+      ? `[${v.map(canonical).join(",")}]`
+      : v && typeof v === "object"
+        ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`
+        : JSON.stringify(v);
+  const bytes = new TextEncoder().encode(canonical({ lesson, manifest }));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

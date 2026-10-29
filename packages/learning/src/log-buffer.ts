@@ -46,6 +46,11 @@ export class LogBuffer {
     }
   }
 
+  /** Take every queued event without sending (the app's unload beacon sends them synchronously). */
+  drain(): LogEvent[] {
+    return this.queue.splice(0, this.queue.length);
+  }
+
   get size(): number {
     return this.queue.length;
   }

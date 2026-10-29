@@ -45,10 +45,25 @@ const STATE_AFTER: Partial<Record<InteractionEvent["type"], GestureState>> = {
   tracking_regained: "DRAGGING",
 };
 
-type Counts = { grab_start: number; release: number; lost: number; tracking_lost: number; grab_move: number };
-const ZERO: Counts = { grab_start: 0, release: 0, lost: 0, tracking_lost: 0, grab_move: 0 };
+type Counts = {
+  grab_start: number;
+  release: number;
+  lost: number;
+  tracking_lost: number;
+  grab_move: number;
+};
+const ZERO: Counts = {
+  grab_start: 0,
+  release: 0,
+  lost: 0,
+  tracking_lost: 0,
+  grab_move: 0,
+};
 
-type RecordedFrame = { t: number; f: Omit<GestureFeatures, "palmCenter"> | null };
+type RecordedFrame = {
+  t: number;
+  f: Omit<GestureFeatures, "palmCenter"> | null;
+};
 
 /** Features rounded for a compact fixture; palmCenter is dropped (it is a landmark-derived point). */
 function toFixtureFrame(f: GestureFeatures | null, t: number): RecordedFrame {
@@ -57,13 +72,24 @@ function toFixtureFrame(f: GestureFeatures | null, t: number): RecordedFrame {
   const { palmCenter: _, cursor, ...rest } = f;
   return {
     t,
-    f: { ...rest, handSize: r(f.handSize), pinchDist: r(f.pinchDist), presence: r(f.presence), cursor: { x: r(cursor.x), y: r(cursor.y) } },
+    f: {
+      ...rest,
+      handSize: r(f.handSize),
+      pinchDist: r(f.pinchDist),
+      presence: r(f.presence),
+      cursor: { x: r(cursor.x), y: r(cursor.y) },
+    },
   };
 }
 
 function describe(e: InteractionEvent): string {
   const t = e.t !== undefined ? `${(e.t / 1000).toFixed(2)}s` : "";
-  const extra = e.type === "grab_end" ? ` reason=${e.reason}` : e.type === "hand_count" ? ` n=${e.n}` : "";
+  const extra =
+    e.type === "grab_end"
+      ? ` reason=${e.reason}`
+      : e.type === "hand_count"
+        ? ` n=${e.n}`
+        : "";
   return `${t} ${e.type}${extra}`;
 }
 
@@ -71,12 +97,19 @@ export type CameraPanelProps = {
   /** Every interaction event from the vision path (the prototype forwards them to the 3D scene). */
   onVisionEvent?: (event: InteractionEvent) => void;
   /** The running vision handle and camera resolution, or null when stopped; whoever holds it must answer hover_result. */
-  onVisionReady?: (handle: VisionHandle | null, camera?: { width: number; height: number }) => void;
+  onVisionReady?: (
+    handle: VisionHandle | null,
+    camera?: { width: number; height: number },
+  ) => void;
   /** Every 5 s perf_sample (M10 event log). */
   onPerfSample?: (sample: PerfSample) => void;
 };
 
-export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: CameraPanelProps = {}) {
+export function CameraPanel({
+  onVisionEvent,
+  onVisionReady,
+  onPerfSample,
+}: CameraPanelProps = {}) {
   const video = useRef<HTMLVideoElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
   const stopRef = useRef<() => void>(undefined);
@@ -114,7 +147,8 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
     const onMessage = (m: VisionMessage) => {
       if (m.type === "cv_status") {
         setCv(m);
-        if (m.state === "no_hand" && state !== "NO_HAND") setFsmState((state = "NO_HAND"));
+        if (m.state === "no_hand" && state !== "NO_HAND")
+          setFsmState((state = "NO_HAND"));
         return;
       }
       if (m.type === "perf_sample") {
@@ -125,6 +159,7 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
         recording.current?.push(toFixtureFrame(m.f, m.t));
         return;
       }
+      if (m.type === "hands") return; // not requested here
 
       onVisionEvent?.(m);
       const next = STATE_AFTER[m.type];
@@ -132,33 +167,50 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
 
       if ("cursor" in m) {
         // Standalone (no scene attached): treat everything as grabbable, the M3 stub.
-        if (!onVisionEvent) handle?.postHoverResult({ type: "hover_result", hoveredId: null, isGrabbable: true, t: m.t ?? 0 });
+        if (!onVisionEvent)
+          handle?.postHoverResult({
+            type: "hover_result",
+            hoveredId: null,
+            isGrabbable: true,
+            t: m.t ?? 0,
+          });
         // The cursor is already mirrored into viewport space, so this canvas is not CSS-flipped.
-        if (c.width !== v.videoWidth) [c.width, c.height] = [v.videoWidth, v.videoHeight];
+        if (c.width !== v.videoWidth)
+          [c.width, c.height] = [v.videoWidth, v.videoHeight];
         ctx.clearRect(0, 0, c.width, c.height);
         ctx.beginPath();
         ctx.arc(m.cursor.x * c.width, m.cursor.y * c.height, 9, 0, 2 * Math.PI);
-        ctx.fillStyle = state === "GRABBING" || state === "DRAGGING" ? "#e53e3e" : "#f7fafc";
+        ctx.fillStyle =
+          state === "GRABBING" || state === "DRAGGING" ? "#e53e3e" : "#f7fafc";
         ctx.fill();
       } else if (m.type === "tracking_lost" || m.type === "hand_count") {
-        if (m.type === "tracking_lost" || m.n === 0) ctx.clearRect(0, 0, c.width, c.height);
+        if (m.type === "tracking_lost" || m.n === 0)
+          ctx.clearRect(0, 0, c.width, c.height);
       }
 
       if (m.type === "cursor") return;
-      if (m.type === "grab_move") return setCounts((n) => ({ ...n, grab_move: n.grab_move + 1 }));
+      if (m.type === "grab_move")
+        return setCounts((n) => ({ ...n, grab_move: n.grab_move + 1 }));
       setCounts((n) => ({
         ...n,
         grab_start: n.grab_start + (m.type === "grab_start" ? 1 : 0),
         tracking_lost: n.tracking_lost + (m.type === "tracking_lost" ? 1 : 0),
-        release: n.release + (m.type === "grab_end" && m.reason === "release" ? 1 : 0),
+        release:
+          n.release + (m.type === "grab_end" && m.reason === "release" ? 1 : 0),
         lost: n.lost + (m.type === "grab_end" && m.reason === "lost" ? 1 : 0),
       }));
       setLog((l) => [...l, describe(m)].slice(-LOG_LINES));
     };
 
     try {
-      const forceMainThread = new URLSearchParams(location.search).get("cv") === "main";
-      handle = await startVision({ video: v, onMessage, forceMainThread, debugFeatures: true });
+      const forceMainThread =
+        new URLSearchParams(location.search).get("cv") === "main";
+      handle = await startVision({
+        video: v,
+        onMessage,
+        forceMainThread,
+        debugFeatures: true,
+      });
     } catch (err) {
       stopCamera(stream);
       setStatus("error");
@@ -167,7 +219,9 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
     }
     onVisionReady?.(handle, { width: v.videoWidth, height: v.videoHeight });
     setStatus("running");
-    setDetail(`camera ${v.videoWidth}x${v.videoHeight}, path ${handle.path}, delegate ${handle.delegate}`);
+    setDetail(
+      `camera ${v.videoWidth}x${v.videoHeight}, path ${handle.path}, delegate ${handle.delegate}`,
+    );
 
     stopRef.current = () => {
       onVisionReady?.(null);
@@ -195,9 +249,15 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
     const t0 = frames[0]!.t;
     const fixture = {
       note: "Recorded on /prototype. Features only, no landmarks. Add an `expect` block, e.g. { grabPairs: 20, tolerance: 2 }.",
-      frames: frames.map((f) => ({ ...f, t: Math.round((f.t - t0) * 10) / 10 })),
+      frames: frames.map((f) => ({
+        ...f,
+        t: Math.round((f.t - t0) * 10) / 10,
+      })),
     };
-    downloadJson(`features-${new Date().toISOString().replace(/[:.]/g, "-")}.json`, fixture);
+    downloadJson(
+      `features-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+      fixture,
+    );
   }
 
   const running = status === "running";
@@ -205,11 +265,20 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
   const budget = VISION_CONSTANTS.INFERENCE_P95_BUDGET_MS;
 
   return (
-    <section className="flex w-[672px] max-w-full flex-col gap-2 overflow-y-auto p-4" aria-label="Camera and hand tracking">
-      <div className="relative aspect-video w-[640px] max-w-full overflow-hidden rounded bg-black">
+    <section
+      className="flex w-2x1 max-w-full flex-col gap-2 overflow-y-auto p-4"
+      aria-label="Camera and hand tracking"
+    >
+      <div className="relative aspect-video w-160 max-w-full overflow-hidden rounded bg-black">
         {/* Mirrored so on-screen motion matches the learner's motion. */}
-        <video ref={video} className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
-        <canvas ref={overlay} className="absolute inset-0 h-full w-full object-cover" />
+        <video
+          ref={video}
+          className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
+        />
+        <canvas
+          ref={overlay}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
         {running && (
           <div
             className="absolute top-2 left-2 flex items-center gap-2 rounded bg-black/60 px-3 py-1 text-white"
@@ -225,7 +294,11 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
       </div>
       <div className="flex flex-wrap items-center gap-3 font-mono text-sm">
         {running ? (
-          <button type="button" className="rounded bg-surface px-3 py-1 underline" onClick={() => stopRef.current?.()}>
+          <button
+            type="button"
+            className="rounded bg-surface px-3 py-1 underline"
+            onClick={() => stopRef.current?.()}
+          >
             Stop camera
           </button>
         ) : (
@@ -239,7 +312,8 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
           </button>
         )}
         <span>
-          cv_status: {cv ? `${cv.state}${cv.hint ? ` (${cv.hint})` : ""}` : status}
+          cv_status:{" "}
+          {cv ? `${cv.state}${cv.hint ? ` (${cv.hint})` : ""}` : status}
         </span>
         <button
           type="button"
@@ -270,8 +344,9 @@ export function CameraPanel({ onVisionEvent, onVisionReady, onPerfSample }: Came
             : ""}
       </p>
       <p className="font-mono text-sm">
-        grab_start {counts.grab_start} · grab_end release {counts.release} · grab_end lost {counts.lost} · tracking_lost{" "}
-        {counts.tracking_lost} · grab_move {counts.grab_move}
+        grab_start {counts.grab_start} · grab_end release {counts.release} ·
+        grab_end lost {counts.lost} · tracking_lost {counts.tracking_lost} ·
+        grab_move {counts.grab_move}
       </p>
       <ol
         className="h-32 overflow-y-auto rounded bg-surface p-2 font-mono text-xs"

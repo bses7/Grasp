@@ -12,19 +12,19 @@ Decision: for **MVP**, content is files; the database stores `lesson_id`, `task_
 | Content tables from day one | Referential integrity; authoring UI possible | Ten tables and an admin UI before one lesson exists; export needed anyway for reproducibility | Poor | **V1**, when a second author or more than ten lessons appear |
 | Hybrid: content in `jsonb` column per lesson | One table, FK-able id | Still a migration and a loader; no query advantage over a file | Fair | Reject; it is a file with extra steps |
 
-What this means for the row design: every MVP table that references content carries denormalised text ids and the small facts the queries need (`task_type`, `activity_kind`, `score_max`) so that mastery and metrics never need to open a JSON file. `lesson_hash` (SHA-256 of the lesson and manifest JSON, written at build) pins each row to the exact content a participant saw. Limitation: if a lesson file is renamed in place, old rows go stale; the versioning rule in doc 10 (ids immutable once used in a study) exists for this reason.
+What this means for the row design: every MVP table that references content carries denormalised text ids and the small facts the queries need (`task_type`, `activity_kind`, `score_max`) so that mastery and metrics never need to open a JSON file. `lesson_hash` (SHA-256 of the lesson and manifest JSON, computed at session creation) pins each row to the exact content a participant saw. Limitation: if a lesson file is renamed in place, old rows go stale; the versioning rule in doc 10 (ids immutable once used in a study) exists for this reason.
 
 Eight-point checklist, files-plus-references: appropriate because one author and one lesson need no authoring UI; limited by no FK integrity on content ids until V1; no browser cost beyond the bundled JSON already shipped; accessibility-neutral; privacy-positive because content tables would be the only tables with no personal data anyway, so nothing is lost; scales to tens of lessons before the file list becomes unwieldy; lowest possible complexity; necessary because attempts must point at *something*, and a text id plus hash is the simplest something.
 
 ## Entity-relationship diagram
 
-Solid relationships are enforced foreign keys. Relationships from the **MVP** tables into the **V1** content tables (`lessons`, `tasks`, `models`) are logical in MVP, carried by text ids, and become foreign keys when the content tables land.
+Solid relationships are enforced foreign keys. Dotted ones are not: `consent_records.session_id` is deliberately a plain uuid so the consent row outlives a withdrawal, and relationships from the **MVP** tables into the **V1** content tables (`lessons`, `tasks`, `models`) are logical in MVP, carried by text ids, and become foreign keys when the content tables land.
 
 ```mermaid
 erDiagram
   users ||--o{ research_sessions : "links optionally V1"
   users ||--o{ achievements : "earns V1"
-  research_sessions ||--o{ consent_records : "has"
+  research_sessions ||..o{ consent_records : "has, no FK"
   research_sessions ||--o{ event_logs : "emits"
   research_sessions ||--o{ instrument_responses : "answers"
   research_sessions ||--o{ lesson_attempts : "makes"
@@ -127,10 +127,10 @@ One challenge to the brief: it lists "Assessments" beside "Activities" as if bot
 | Rule | Value |
 |---|---|
 | Names | plural `snake_case` tables, `snake_case` columns |
-| Primary key | `id uuid default gen_random_uuid()`; the client may supply a v4 UUID for `research_sessions` and `event_logs` so writes are idempotent on retry |
+| Primary key | `id uuid default gen_random_uuid()`; the client supplies a v4 UUID for `research_sessions` (validated, replaced by a server UUID if already taken) and `lesson_attempts` (inserted `on conflict do nothing`, so a retried POST writes once); `event_logs` keep the server default and are idempotent on unique `(session_id, seq)` instead |
 | Time | `created_at timestamptz not null default now()` on every table; `t integer` is milliseconds since session start as emitted by the client, never server time, so metrics are immune to clock skew |
-| Identity | No table holds a name, email, IP address, user agent string beyond `device_info` payload fields, or free text typed by a participant, except `instrument_responses.response` for the three open questions, which the consent text names |
-| Deletion | Every MVP table has `session_id ... references research_sessions(id) on delete cascade` |
+| Identity | No table holds a name, email, IP address, user agent string (`/api/events` rejects a `ua` payload key; doc 14 `device_info`), or free text typed by a participant, except `instrument_responses.response` for the three open questions, which the consent text names |
+| Deletion | Every MVP table except `consent_records` has `session_id ... references research_sessions(id) on delete cascade`; `consent_records.session_id` has no FK (migration `0001_consent_retained.sql`, open question 4) |
 | JSON | `jsonb` columns are validated with Zod in the route handler before insert; the database stores, it does not validate shape |
 
 ## MVP tables
@@ -143,16 +143,17 @@ One row per participant-session. In MVP a session runs exactly one lesson, so th
 |---|---|---|---|---|
 | `id` | uuid | no | PK | the `sessionId` in every `LogEvent`, `TutorRequest`, and cookie |
 | `user_id` | uuid | yes | FK `users.id` on delete set null | **V1** linkage, null in MVP; nullable so a user deletion never destroys research data |
-| `participant_code` | text | yes | unique | 6-character random code printed for the participant; resolves the session for the S2 retention page and deletion requests; not identity |
-| `assignment_code` | text | no | unique | pre-assigned code from the researcher's offline blocked-randomisation list; entered at session start; encodes `condition`; the app never randomises |
+| `participant_code` | text | yes | unique | 6-character random code from an unambiguous alphabet (no `0`/`O`, `1`/`I`), printed for the participant; resolves the session for the S2 retention page and deletion requests; not identity |
+| `assignment_code` | text | no | unique | pre-assigned code from the researcher's offline blocked-randomisation list, entered on the consent screen; format `<phase><condition>-<number>` (phase `P`/`S`/`D`, condition `G`/`M`, e.g. `PG-014`; [03 Session create and resume](03-system-architecture.md#session-create-and-resume)); unique, so a study code is single-use (409 on reuse); dev codes `DG`/`DM` are stored as `<code>-<first 8 chars of id>` so they can be reused; the app never randomises |
 | `condition` | text | no | check in (`gesture`, `mouse`) | derived from `assignment_code` on the server |
-| `study_phase` | text | no | check in (`pilot`, `main`, `dev`) | `dev` rows are excluded from every analysis and purged freely |
-| `consent_version` | text | no | | the consent text version accepted |
+| `study_phase` | text | no | check in (`pilot`, `main`, `dev`) | derived from `assignment_code`; `dev` rows are excluded from every analysis and purged freely |
+| `consent_version` | text | no | | the consent text version accepted (`pilot-v1`, `CONSENT_VERSION` in `apps/web/lib/consent.ts`); resume requires a `consent_records` row with this version |
 | `lesson_id` | text | no | | `anatomy.heart.chambers_v1` |
-| `lesson_hash` | text | no | | SHA-256 from the build, per doc 10 |
-| `app_version` | text | no | | git commit short hash of the deployed app |
-| `started_at` | timestamptz | no | | |
-| `ended_at` | timestamptz | yes | | set on `activity_end` of the mastery activity or on `sendBeacon` at unload |
+| `lesson_hash` | text | no | | `contentHash` of lesson plus manifest at session creation, per [doc 10](10-3d-content-system.md#content-versioning); on resume a differing current hash is reported as `contentChanged` |
+| `app_version` | text | no | | git commit short hash of the deployed app (`VERCEL_GIT_COMMIT_SHA`, 7 chars), `dev` locally |
+| `started_at` | timestamptz | no | | server clock; resume returns `elapsedMs` since this so the client keeps one time base for `t` |
+| `ended_at` | timestamptz | yes | | stamped once by `PATCH /api/session/:id` `{ ended: true }` when the lesson reaches its results screen; null means the participant left before it. Written for every consented session, independent of logging consent (migration `0002_session_progress`; until then `POST /api/events` stamped it on `mastery_computed`, so no-log sessions stayed null) |
+| `skipped_task_ids` | text[] | no | default `{}` | tasks the learner skipped from the remediation card, appended once each by `PATCH /api/session/:id` `{ skip: taskId }`; returned as `skipped` on resume so a reload does not offer them again. Lesson progress like `lesson_attempts`, so it does not depend on logging consent. Backfilled in `0002` from `task_end` events with outcome `skipped` |
 | `calibration_accuracy` | numeric(4,3) | yes | | from the calibration tutorial; null for mouse |
 | `s2_completed` | boolean | no | default false | retention test submitted |
 | `created_at` | timestamptz | no | | |
@@ -161,28 +162,28 @@ Index: `(study_phase, condition, started_at)` for the export of one study arm.
 
 ### `consent_records` (MVP)
 
-Proof of consent without identity. Kept separate from `research_sessions` so a withdrawal is an insert-free update that leaves the session row intact until the deletion job runs.
+Proof of consent without identity. Kept separate from `research_sessions`, with no foreign key, so it survives the withdrawal that deletes the session and everything under it. Written in the same transaction as the `research_sessions` row by `POST /api/session` (create body); `POST /api/session/:id/restart` (dev sessions only) copies it to the new session.
 
 | Column | Type | Null | Key or constraint | Notes |
 |---|---|---|---|---|
 | `id` | uuid | no | PK | |
-| `session_id` | uuid | no | FK cascade | |
+| `session_id` | uuid | no | plain uuid, no FK | open question 4; dropped in `0001_consent_retained.sql` |
 | `consent_version` | text | no | | |
-| `consent_logging` | boolean | no | | gates `event_logs` writes; the client logger drops events when false |
-| `consent_tutor_payloads` | boolean | no | | gates `ai_interactions.request_json`, `response_json`, `delivered_text` per doc 07 |
+| `consent_logging` | boolean | no | | the separate, unticked-by-default event-log opt-in. Gates `event_logs` writes twice: `POST /api/session` returns it as `consentLogging` and the client `LogBuffer` drops events while it is false; `/api/events` answers 403 unless a non-withdrawn row has it true |
+| `consent_tutor_payloads` | boolean | no | | gates `ai_interactions.request_json`, `response_json`, `delivered_text` per doc 07. Written `false` until the tutor ships (Phase 5); asking for it then means a new consent version |
 | `agreed_at` | timestamptz | no | | |
-| `withdrawn_at` | timestamptz | yes | | set by the withdrawal route; deletion follows within the stated window |
+| `withdrawn_at` | timestamptz | yes | | stamped by `withdrawSession` in the same transaction that deletes the session |
 | `created_at` | timestamptz | no | | |
 
 Constraint: unique `(session_id, consent_version)`.
 
 ### `event_logs` (MVP)
 
-Append-only. The system of record for the study ([14 section 6.3](14-evaluation-methodology.md#63-what-the-database-must-store)). Every metric formula in doc 14 is a query over this table joined to `research_sessions` for `condition`.
+Append-only. The system of record for the study ([14 section 6.3](14-evaluation-methodology.md#63-what-the-database-must-store)). Every metric formula in doc 14 is computed from this table plus `instrument_responses`: `pnpm research:metrics <id|code|log.json>` or `--phase dev|pilot|main` (`scripts/research/metrics.ts`) reads one session ordered by `seq`, takes `condition` from `research_sessions`, and runs `sessionMetrics` (`packages/learning/src/metrics.ts`). The script also reconciles the `task_attempt` event count against the session's `lesson_attempts` rows and exits 1 on any failed check (`seq` gap or duplicate, attempt outside its task, `place` while tracking was lost, attempt rows missing).
 
 | Column | Type | Null | Key or constraint | Notes |
 |---|---|---|---|---|
-| `id` | uuid | no | PK | client-generated so a retried batch is idempotent via `on conflict do nothing` |
+| `id` | uuid | no | PK | server default; a retried batch is idempotent through `on conflict do nothing` on `(session_id, seq)` |
 | `session_id` | uuid | no | FK cascade | |
 | `seq` | integer | no | **unique `(session_id, seq)`** | monotonic per session; gaps reveal loss, duplicates are rejected |
 | `t` | integer | no | | ms since session start |
@@ -190,7 +191,7 @@ Append-only. The system of record for the study ([14 section 6.3](14-evaluation-
 | `payload` | jsonb | no | | the per-type payload contract from doc 14; never landmarks, never text |
 | `received_at` | timestamptz | no | default now() | server receipt, for batching diagnostics only |
 
-Rules, enforced where stated: no identity columns (schema); no `condition` column, it is read from the session (schema, avoids inconsistent rows); `payload` keys are restricted to the contract for `type` (route handler Zod, `strict()`); `grab_move` per-frame events are rejected, only `grab_move_summary` is accepted (route handler). Indexes: `(session_id, t)` for ordered replay; `(session_id, type)` for the counting metrics such as `n(task_attempt)`; a partial index on `(type) where type in ('task_attempt','mastery_computed')` for cross-session dashboards once the main study runs. Limitation: `jsonb` payload means a metric that filters on `payload->>'taskType'` does a scan within the session; with 1–3 k rows per session that is milliseconds, and the index on `(session_id, type)` already narrows it.
+Rules, enforced where stated: no identity columns (schema); no `condition` column, it is read from the session (schema, avoids inconsistent rows); `payload` keys are restricted to the contract for `type` (route handler Zod, `strict()`; **known gap**: the route still enforces only a generic rule, at most 16 keys with scalar values and strings of at most 300 characters and no `ua` key, so coordinate arrays are rejected with 400. The per-type schemas of doc 14 §6.1 were planned to arrive with the metrics script, but step 4.7 built `pnpm research:metrics` without them: `sessionMetrics` in `packages/learning/src/metrics.ts` reads payload keys defensively, so a missing or mistyped key yields a `null` metric rather than a rejected batch. Add the per-type schemas before the pilot freezes the payload contract); `grab_move` per-frame events are rejected, only `grab_move_summary` is accepted (route handler). Indexes: `(session_id, t)` for ordered replay; `(session_id, type)` for the counting metrics such as `n(task_attempt)`; a partial index on `(type) where type in ('task_attempt','mastery_computed')` for cross-session dashboards once the main study runs. Limitation: `jsonb` payload means a metric that filters on `payload->>'taskType'` does a scan within the session; with 1–3 k rows per session that is milliseconds, and the index on `(session_id, type)` already narrows it.
 
 ### `instrument_responses` (MVP)
 
@@ -210,7 +211,7 @@ Constraint: unique `(session_id, instrument, item_no)`, so a resubmitted page re
 
 ### `lesson_attempts` (MVP)
 
-One row per `task_attempt`. The columns are the attempt record the engine guarantees in [06](06-learning-engine.md#runtime-position-and-persistence), plus the three denormalised facts (`activity_kind`, `task_type`, `score_max`) that the mastery function needs without opening the lesson file. The same client event also produces an `event_logs` row; the study uses the log, the product uses this table.
+One row per `task_attempt`. The columns are the attempt record the engine guarantees in [06](06-learning-engine.md#runtime-position-and-persistence), plus the three denormalised facts (`activity_kind`, `task_type`, `score_max`) that the mastery function needs without opening the lesson file. The same client event also produces an `event_logs` row when the session has logging consent. Both are research data: this table is written for every consented session and carries task outcomes for all participants ([14 §6.3](14-evaluation-methodology.md#63-what-the-database-must-store)); the log is the system of record for process data, only for sessions that opted in.
 
 | Option | Pros | Cons | Fit for solo dev | Verdict |
 |---|---|---|---|---|
@@ -219,7 +220,7 @@ One row per `task_attempt`. The columns are the attempt record the engine guaran
 
 | Column | Type | Null | Key or constraint | Notes |
 |---|---|---|---|---|
-| `id` | uuid | no | PK | |
+| `id` | uuid | no | PK | client-generated; `POST /api/attempts` inserts `on conflict do nothing`, so retries write once |
 | `session_id` | uuid | no | FK cascade | |
 | `user_id` | uuid | yes | FK `users.id` set null | **V1** |
 | `lesson_id` | text | no | | |
@@ -338,7 +339,7 @@ When these land, the migration adds `lessons.key`, `tasks.key`, and `models.key`
 | Table | Index | Serves |
 |---|---|---|
 | `event_logs` | unique `(session_id, seq)` | idempotent batches, loss detection |
-| `event_logs` | `(session_id, t)` | ordered replay for the metrics script and the attempt-reconstruction pilot check |
+| `event_logs` | `(session_id, t)` | ordered replay by time; `pnpm research:metrics` reads a session ordered by `seq`, which the unique index above serves |
 | `event_logs` | `(session_id, type)` | `n(type)` counts in every doc 14 formula |
 | `lesson_attempts` | `(session_id, lesson_id, task_id, t desc)` | latest attempt per task; resume |
 | `lesson_attempts` | `(session_id, lesson_id, objective_id)` | mastery screen |
@@ -353,11 +354,11 @@ Every foreign key column is indexed because cascade deletes scan them. Nothing e
 
 | Behaviour | Mechanism | Tier |
 |---|---|---|
-| Participant deletion | `DELETE /api/session/:id` (route in [03](03-system-architecture.md#authentication)) runs `delete from research_sessions where id = $1`; `on delete cascade` removes `event_logs`, `instrument_responses`, `lesson_attempts`, `ai_interactions` (and `progress` once it exists in V1) in one transaction; the `consent_records` row is retained with `withdrawn_at` set as proof the request was honoured (matches doc 15). The route accepts `id` or `participant_code`, is callable with the `sessionId` alone (the UUID is the secret; no admin token in MVP), and writes one line to a server log (`session deleted`, timestamp, no payload) | **MVP** |
-| Participant export | `GET /api/session/:id/export` returns the six MVP tables for one session as a single JSON document; the same endpoint feeds the end-of-session download fallback in doc 14 | **MVP** |
+| Participant deletion | `withdrawSession` in `packages/db/src/privacy.ts`, in one transaction: stamps `consent_records.withdrawn_at`, then `delete from research_sessions where id = $1`, whose `on delete cascade` removes `event_logs`, `instrument_responses`, `lesson_attempts`, `ai_interactions` (and `progress` once it exists in V1); the `consent_records` row is retained as proof the request was honoured. Two callers: `DELETE /api/session/:id` (route in [03](03-system-architecture.md#authentication)), whose `id` must equal the `grasp_session` cookie (403 otherwise), which clears the cookie and writes one server log line (`session deleted`, no session id, no payload); and `pnpm research:delete <sessionId|participantCode|sessionCode>`\|participantCode>` (`scripts/research/delete-session.ts`) for a participant who has left the device and quotes the code. `findSession` resolves any of the three keys. Verified by the A21 integration test `packages/db/src/privacy.test.ts` against local Postgres (skipped when no database answers) | **MVP** |
+| Participant export | `exportSession` in the same file returns the six MVP tables for one session (`session`, `consent`, `attempts`, `events`, `instruments`, `tutor`) as one JSON document. Callers: `GET /api/session/:id/export` (cookie-gated like the delete, served as an attachment) and `pnpm research:export <sessionId\|participantCode\|sessionCode> [out.json]`. The end-of-session "Download event log" button on the results screen is separate: it saves the client's in-memory `LogEvent` list, not this export, and is shown only when the session has logging consent | **MVP** |
 | Study retention | Five years after publication, then `delete ... where study_phase = 'main' and started_at < $cutoff`; the date is written in the consent text and in `docs/` when the study is pre-registered | **MVP** policy, run by hand |
 | Dev and pilot purge | `study_phase = 'dev'` rows deleted on every deploy to the pilot environment; `pilot` rows kept until the pilot report is written, then deleted | **MVP** |
-| Withdrawal | `consent_records.withdrawn_at` set immediately; cascade delete within the stated window (seven days, per doc 14) | **MVP** |
+| Withdrawal | `withdrawn_at` and the cascade delete happen together, immediately, in the transaction above; the seven-day window in doc 14 and the consent text is the promise to the participant, not a deferred job | **MVP** |
 | Account deletion | `users.deleted_at` set; research rows have `user_id` set null by the FK, so a withdrawn account does not silently delete study data that the participant consented to keep. Participant-initiated research deletion remains the cascade above | **V1** |
 | Backups | Neon's point-in-time restore window on the free tier (check the current value; it has been seven days) is the only backup during the pilot. Before the main study, a nightly `pg_dump` to encrypted object storage, scripted in `scripts/` | **MVP** pilot / **V1** main |
 
@@ -381,7 +382,7 @@ Limitation: branching and scale-to-zero are Neon features; if the project later 
 
 ## ORM and migrations: Drizzle, Prisma, or raw SQL
 
-Decision: **Drizzle ORM** with `drizzle-kit` migrations, over the Neon serverless driver in production and `node-postgres` locally. Doc 03 already names Drizzle; the comparison here is the justification.
+Decision: **Drizzle ORM** with `drizzle-kit` migrations, over `postgres.js` both locally and against Neon (TCP, `max: 1` connection per function instance, `connect_timeout` 3 s). One driver everywhere was chosen over the Neon serverless driver so local Docker and Neon run the same code path; route handlers import query operators re-exported from `@grasp/db` so only one `drizzle-orm` instance is loaded. Doc 03 already names Drizzle; the comparison here is the justification.
 
 | Option | Pros | Cons | Fit for solo dev | Verdict |
 |---|---|---|---|---|
@@ -399,7 +400,7 @@ Eight-point checklist for Drizzle:
 | 3 Browser performance | None; server-only import, never bundled client-side |
 | 4 Accessibility | None |
 | 5 Privacy | Parameterised queries by construction; the schema file makes "no identity columns" reviewable in one place |
-| 6 Scalability | Stateless over the Neon HTTP driver; no connection pool to exhaust from serverless functions; V1 can switch to pooled WebSocket or `postgres.js` with one config change |
+| 6 Scalability | One connection per function instance over `postgres.js`, which bounds connection use at study-day traffic (if Neon's pooled endpoint is used, postgres.js needs `prepare: false`; untested); **V1** can switch to the Neon HTTP driver with one change in `packages/db/src/client.ts` if cold-start TCP setup shows in latency |
 | 7 Complexity | One `schema.ts`, one `drizzle.config.ts`, `drizzle-kit generate` and `migrate` scripts; under an hour to set up |
 | 8 Necessary? | Yes, because migrations and row types are required either way; the simpler alternative is raw SQL with hand-written types, which costs more over twelve V1 tables than Drizzle costs now |
 
@@ -408,13 +409,13 @@ Eight-point checklist for Drizzle:
 | Step | What | When |
 |---|---|---|
 | Schema source | `packages/db/src/schema.ts` defines the six MVP tables; V1 tables (including `progress`) live in the same file behind a comment block and are not exported until the V1 migration | Phase C scaffold |
-| Migration files | `drizzle-kit generate` writes numbered SQL files to `packages/db/migrations/`; they are committed and reviewed like code; `drizzle-kit migrate` applies them | every schema change |
+| Migration files | `drizzle-kit generate` writes numbered SQL files to `packages/db/migrations/` (first: `0000_init.sql`); they are committed and reviewed like code; `drizzle-kit migrate` applies them | every schema change |
 | Check constraints from one list | The `type` check on `event_logs` and the `kind`, `status`, `outcome` checks are generated from the same TypeScript unions that Zod validates, by a small script, so the database and the route handler can never disagree | Phase C |
-| Local | Docker Compose runs Postgres 16 on `localhost:5432`; `pnpm db:reset` drops, migrates, and seeds; tests run against it | daily |
+| Local | Docker Compose runs Postgres 16 published on host port 5433 (`DATABASE_URL=postgres://...@localhost:5433/...`), because a natively installed Windows Postgres commonly holds 5432 and a connection to `localhost:5432` reaches it and fails authentication. `pnpm db:up`, then `pnpm db:migrate` (`drizzle-kit migrate` in `packages/db`), then `pnpm db:seed` (stub until the seed below is written). Warning: `drizzle-kit migrate` can exit 0 even when the connection failed, so read its output or check the tables exist. Without `DATABASE_URL`, or with Postgres down, the routes answer 503 and the lesson runs unsaved | daily |
 | Dev database | **MVP**: one long-lived Neon `dev` branch, created by hand, that preview deploys and the researcher's laptop share; local Docker Postgres for tests. No CI integration | Phase C, once |
 | Preview branching | **V1**: each Vercel preview deploy points at a Neon branch created from `main` by a CI step, so a migration is exercised on a copy of real data before it reaches production. Not worth the CI wiring for one developer and one lesson | per pull request, V1 |
 | Production | `drizzle-kit migrate` runs as a manual step before the deploy that needs it, never automatically on cold start, because a half-applied migration during a study session is the worst case | per release |
-| Seed data | Content needs no seeding (it is files). The seed inserts two `research_sessions` rows with `study_phase = 'dev'`, one per condition, with matching `consent_records`, and replays the recorded `LogEvent` fixture from the learning-engine tests into `event_logs` and `lesson_attempts`. This gives the metrics script and the mastery query something real to run against | Phase C, refreshed when the fixture changes |
+| Seed data | Content needs no seeding (it is files). The seed inserts two `research_sessions` rows with `study_phase = 'dev'`, one per condition, with matching `consent_records`, and replays the recorded `LogEvent` fixture from the learning-engine tests into `event_logs` and `lesson_attempts`. This gives the metrics script and the mastery query something real to run against. `scripts/db/seed-dev.ts` is still a stub: step 4.7 built `pnpm research:metrics` without it; the script runs on real dev sessions recorded through `/consent` with a `DG`/`DM` code, or on a downloaded `grasp-log-*.json` file | when a test needs database fixtures; refreshed when the fixture changes |
 | Randomisation list | The pre-generated blocked assignment sequence from doc 14 is **not** seeded into the database; it stays offline with the researcher; the server receives only the `assignment_code` per session and derives `condition` from it | never |
 | V1 content migration | A one-off script reads every manifest and lesson file, inserts `subjects`, `topics`, `models`, `components`, `lessons`, `activities`, `tasks`, then adds the foreign keys from the MVP text columns. Idempotent, keyed on the file ids | V1 |
 
@@ -425,6 +426,7 @@ Limitation: `drizzle-kit` cannot express every constraint (partial indexes, gene
 1. Resolved: `sessionId` is a client-generated v4 UUID that the server validates for format and uniqueness and records in `research_sessions` ([03 Authentication](03-system-architecture.md#authentication) now says the same). The `id uuid default gen_random_uuid()` default remains only as a safety net for the seed script.
 2. Resolved: the deletion route is `DELETE /api/session/:id` in docs 03, 14 and 15.
 3. Should `demographics` be an `instrument_responses.instrument` value (as here) or excluded from the database entirely and kept on paper with the consent form? Keeping it in the database is convenient for analysis; keeping it offline is stronger minimisation. The approving institution may decide.
+4. Resolved in step 4.6: `consent_records.session_id` is a plain uuid with no FK (`0001_consent_retained.sql` drops the cascade FK that `0000_init.sql` declared), so the consent row with `withdrawn_at` survives the cascade delete. Chosen over `on delete set null` because the row keeps the id it proves consent for, which `pnpm research:delete` and an ethics audit can match against the researcher's offline key. Limitation: nothing stops an orphan consent row for a session id that never existed; only `POST /api/session` and the restart route insert them.
 
 ## Related
 

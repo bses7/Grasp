@@ -1,5 +1,5 @@
 import type { Socket } from "@grasp/types";
-import { Object3D, PerspectiveCamera } from "three";
+import { Object3D, PerspectiveCamera, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { coverFit, landmarkToNdc } from "./coords";
 import { beginGrab, endGrab, moveGrab } from "./drag-plane";
@@ -96,6 +96,15 @@ describe("endGrab", () => {
     expect(r.snapTo).toBeNull();
   });
 
+  it("treats a release before any move as nothing: no event, socket kept", () => {
+    const { camera, obj } = setup();
+    const occ: SocketOccupancy = { socket_aorta: "aorta" };
+    const grab = beginGrab("aorta", obj, ndcOf(camera, -10, 5), camera, occ)!;
+    const r = endGrab(grab, "release", SOCKETS, occ, 4);
+    expect(r).toEqual({ event: null, snapTo: null });
+    expect(occ.socket_aorta).toBe("aorta");
+  });
+
   it("never snaps on a lost release, even inside an accepting socket", () => {
     const { camera, obj } = setup();
     const occ: SocketOccupancy = {};
@@ -112,6 +121,13 @@ describe("endGrab", () => {
     obj.position.set(10, 0, 0);
     expect(nearestAcceptingSocket(obj, SOCKETS, { socket_aorta: "pulmonary_artery" })).toBeNull();
     expect(nearestAcceptingSocket(obj, SOCKETS, { socket_aorta: null })?.id).toBe("socket_aorta");
+  });
+
+  it("ignores depth along the view direction, which a camera-facing drag cannot change", () => {
+    const { camera, obj } = setup();
+    obj.position.set(10, 0, 20); // on screen over the socket, 20 cm nearer the camera
+    expect(nearestAcceptingSocket(obj, SOCKETS)).toBeNull();
+    expect(nearestAcceptingSocket(obj, SOCKETS, {}, camera.getWorldDirection(new Vector3()))?.id).toBe("socket_aorta");
   });
 });
 

@@ -18,8 +18,7 @@ export type { AxisLocks, GrabEndResult, GrabState } from "./drag-plane";
 export { nearestAcceptingSocket, snapTo, tweenTo, resolveSocketVisual } from "./sockets";
 export type { SocketOccupancy } from "./sockets";
 
-export { applySceneCommand } from "./commands";
-export type { SceneHandle } from "./commands";
+export { cameraPosition, dolly, lerpPose, orbitFrom, poseFacing } from "./orbit";
 
 export { snapshotSceneState, diffSceneState } from "./scene-state";
 export type { SnapshotInput, SceneStateDiff } from "./scene-state";
@@ -32,8 +31,6 @@ export { SocketMarker } from "./components/socket-marker";
 export type { SocketMarkerProps } from "./components/socket-marker";
 export { Hotspot } from "./components/hotspot";
 export type { HotspotProps } from "./components/hotspot";
-export { OrbitRig } from "./components/orbit-rig";
-export type { OrbitPose, OrbitRigProps } from "./components/orbit-rig";
 export { KEY_MAP } from "./components/mouse-controls";
 export type { KeyAction } from "./components/mouse-controls";
 export { parseGlb } from "./model-loader";

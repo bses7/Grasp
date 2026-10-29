@@ -17,7 +17,7 @@ Two assumptions in the brief are weak and shape this scope. First, the brief tre
 | Subject | Human anatomy | **MVP** |
 | Topic | The four chambers of the heart and the great vessels | **MVP** |
 | Learners | Late-secondary (16–18) and first-year undergraduate biology or nursing learners; study participants 16+; the developer-researcher ([01](01-product-definition.md#target-users)) | **MVP** |
-| 3D environment | One full-bleed React Three Fiber scene, dark theme, one directional plus one hemisphere light, no shadows, no post-processing, demand frameloop when idle ([05 §10](05-3d-interaction.md#10-render-performance-budget)) | **MVP** |
+| 3D environment | One full-bleed React Three Fiber scene on a transparent canvas over the light Heart studio backdrop ([11](11-ui-ux.md)), one directional plus one hemisphere light, no shadows, no post-processing, demand frameloop when idle ([05 §10](05-3d-interaction.md#10-render-performance-budget)) | **MVP** |
 | Screens | Landing, Learning environment (all six activity kinds), Feedback (in-scene), Assessment (same environment, stricter rules), Results, plus the consent, calibration, test, questionnaire and retention pages the pilot needs ([11](11-ui-ux.md#major-screens)) | **MVP** |
 | Platforms | Desktop Chrome and Edge on a laptop with an integrated GPU and a 720p webcam; Safari with the main-thread half-rate CV fallback | **MVP** |
 | Content delivery | Lesson JSON and manifest bundled at build time; GLB, Draco decoder, MediaPipe `.task` and WASM served from `apps/web/public/` on Vercel ([10](10-3d-content-system.md#content-versioning)); object storage behind a CDN is **V1**, before the main study | **MVP** |
@@ -37,7 +37,7 @@ One GLB, under 5 MB Draco-compressed, under 150k triangles, with ten named compo
 | `pulmonary_veins` | vessel | no | none | Distractor; selectable for exploration | **MVP** |
 | `superior_vena_cava` | vessel | no | none | Distractor | **MVP** |
 | `inferior_vena_cava` | vessel | no | none | Distractor | **MVP** |
-| `septum` | wall | no | none | Distractor; hotspot `hs_septum` | **MVP** |
+| `septum` | wall | no | none | Distractor; planned, not in the shipped `heart_v1` (the split GLB has no septum part) | **MVP** |
 
 Six of ten are grabbable. The four fixed components are deliberate: they give `identify` tasks distractors and keep the challenge activity to six placements, within the ≤ 8 grabbable soft limit in [10](10-3d-content-system.md#asset-limits).
 
@@ -50,7 +50,7 @@ Six of ten are grabbable. The four fixed components are deliberate: they give `i
 | `socket_aorta` | 1.2 | `aorta`, `pulmonary_artery` | ghost | The two great arteries are the classic confusion pair | **MVP** |
 | `socket_pulmonary_artery` | 1.2 | `aorta`, `pulmonary_artery` | ghost | same | **MVP** |
 
-Hotspots `hs_lv_wall` and `hs_septum` (kind `info`) and poses `assembled` and `exploded` complete the manifest. No animation clips in MVP (**V1**).
+Hotspots `hs_lv_wall`, `hs_rv`, `hs_la`, `hs_ra`, `hs_aorta`, `hs_pa` (kind `info`, one per part in the shipped `heart_v1`) and poses `assembled` and `exploded` complete the manifest. No animation clips in MVP (**V1**).
 
 GLB sourcing is the open question [10](10-3d-content-system.md#open-questions) assigns to this file. Decision:
 
@@ -93,7 +93,7 @@ The twelve capabilities from [05 §3](05-3d-interaction.md#3-the-twelve-capabili
 | 9 | Component separation | `assembled` ↔ `exploded` pose tween; drag out of socket | Slider-driven partial explode | **MVP** |
 | 10 | Guided animations | Camera tween to `cameraTo`; pose tweens; engine-driven worked example | GLB animation clips | tweens **MVP**, clips **V1** |
 | 11 | Resetting scenes | Engine `reset()` to the activity's initial snapshot; R key; HUD button | | **MVP** |
-| 12 | Interactive hotspots | `hs_lv_wall`, `hs_septum`; `point` dwell or click opens the body text | `kind: "task"` hotspots | **MVP** |
+| 12 | Interactive hotspots | `hs_lv_wall`, `hs_rv`, `hs_la`, `hs_ra`, `hs_aorta`, `hs_pa`; `point` dwell or click opens the body text | `kind: "task"` hotspots | **MVP** |
 
 Limitation stated plainly: a learner cannot move a part toward or away from the camera on purpose. Every task in the lesson is completable because sockets supply depth and orbit exposes any hidden socket (locked position 4).
 
@@ -103,8 +103,8 @@ The lesson tree is owned by [06](06-learning-engine.md#example-lesson-tree). The
 
 | Activity | Kind | Scene | Tasks | Learning job | Tier |
 |---|---|---|---|---|---|
-| `act_intro` | introduction | assembled, orbit only | none; 3 narration cards; completion ≥ 20 s | Activate prior knowledge; learn orbit | **MVP** |
-| `act_explore` | explore | assembled, hotspots on | none; completion ≥ 60 s | Build a spatial model without grading | **MVP** |
+| `act_intro` | introduction | assembled, orbit only | none; 3 narration cards; completion `{ continue: true }` (the learner presses "Continue →"; [06](06-learning-engine.md), user decision 2026-10-29) | Activate prior knowledge; learn orbit | **MVP** |
+| `act_explore` | explore | assembled, hotspots on | none; completion `{ continue: true }` (the learner presses "Start the lesson →") | Build a spatial model without grading | **MVP** |
 | `act_guided` | guided | assembled, ghost sockets, grab on, 3 attempts, hints 1–3 | `t_g1` identify `left_ventricle`; `t_g2` identify `right_atrium` (level-2 hint `tutor: true`); `t_g3` place `aorta` → `socket_aorta` (level-3 hint `tutor: true`) | Worked practice with faded support | **MVP** |
 | `act_challenge` | challenge | exploded, sockets visible, 1 hint max | `t_c1`–`t_c4` place the four chambers; `t_c5` sequence `right_atrium` → `right_ventricle` → `left_atrium` → `left_ventricle`, strict order | Independent reassembly from memory; blood-path analysis | **MVP** |
 | `act_assess` | assessment | assembled, sockets hidden, 1 attempt, no hints | `t_a1` identify `right_ventricle`; `t_a2` identify `left_atrium`; `t_a3` place `pulmonary_artery`; `t_a4` compare wall thickness, answer `left_ventricle` | Unaided evidence that feeds mastery at 2× weight | **MVP** |
@@ -132,10 +132,10 @@ Limitation: the in-lesson assessment evidences remember through analyze for stru
 | Element | MVP behaviour | Where | Tier |
 |---|---|---|---|
 | Per-objective mastery | Recomputed from attempts on every evaluation; shown as four bands (not started, developing, approaching, mastered) on the mastery activity and results screen | engine, [08](08-gamification.md#mastery-levels) | **MVP** |
-| Attempts persisted | In memory, mirrored to `localStorage` by `sessionId`, posted to the attempts route; resumable after reload | [06](06-learning-engine.md#runtime-position-and-persistence), [03](03-system-architecture.md) | **MVP** |
-| Progress row | Activity cursor and mastery per objective, upserted per session | [09](09-database.md) | **MVP** |
-| Research event log | Every `LogEvent` type in [14 §6.1](14-evaluation-methodology.md#61-schema), batched every 10 s or 50 events, `sendBeacon` on unload, end-of-session JSON download fallback, consent-gated | logger | **MVP** |
-| Progress chip and results screen | "Task n of m"; mastery bars with objective statements; per-task outcome list; "Review the parts you missed" | [11](11-ui-ux.md) | **MVP** |
+| Attempts persisted | Posted to the attempts route as `lesson_attempts` rows with client ids (idempotent; beaconed on page close if unsaved); a reload resumes from them via `POST /api/session`; only the `sessionId` is kept in `localStorage`, as the cookie fallback | [06](06-learning-engine.md#runtime-position-and-persistence), [03](03-system-architecture.md) | **MVP** |
+| Progress row | Activity cursor and mastery per objective, upserted per session; in MVP both are recomputed from `lesson_attempts` | [09](09-database.md) | **V1** |
+| Research event log | Every `LogEvent` type in [14 §6.1](14-evaluation-methodology.md#61-schema), batched every 10 s or 50 events, `sendBeacon` on unload, end-of-session JSON download fallback, consent-gated twice: the client drops events and the server refuses them (403) without logging consent ([03 Session create and resume](03-system-architecture.md#session-create-and-resume)); the JSON download is offered only with that consent | logger | **MVP** |
+| Level path and results screen | Level path (stage n of m); mastery bands per objective (doc 08) with objective statements; per-task outcome list; "Review the parts you missed" in dev sessions only (never pilot or study, [06](06-learning-engine.md)) | [11](11-ui-ux.md) | **MVP** |
 | Anonymous session | Client-generated `sessionId` UUID, validated and recorded by the server on first contact; condition locked per session; delete and export by `sessionId` | [03](03-system-architecture.md#authentication), [09](09-database.md) | **MVP** |
 
 Nothing above reads XP. The progress indicator is the only reward-adjacent element in the MVP.

@@ -27,12 +27,14 @@ export const GRADED_ACTIVITY_KINDS: ReadonlyArray<Activity["kind"]> = ["guided",
  * Completion rule for one activity (lesson-schema §3 `completion`):
  * `{ allTasks: true }` every task correct or marked failed;
  * `{ minCorrect: n }` at least n tasks correct;
- * `{ time: s }` at least s seconds elapsed in the activity.
+ * `{ time: s }` at least s seconds elapsed in the activity;
+ * `{ continue: true }` never by itself: the learner ends it with the Continue button (TaskRunner.proceed).
  */
 export function isActivityComplete(activity: Activity, attempts: AttemptRecord[], elapsedMs: number): boolean {
   const c = activity.completion;
   if ("allTasks" in c) return activity.tasks.every((t) => taskStatus(activity, t, attempts) !== "open");
   if ("minCorrect" in c) return activity.tasks.filter((t) => taskStatus(activity, t, attempts) === "correct").length >= c.minCorrect;
+  if ("continue" in c) return false;
   return elapsedMs >= c.time * 1000;
 }
 
@@ -41,11 +43,18 @@ export function maxAttemptsFor(activity: Activity, task: Task): number {
   return task.maxAttempts ?? DEFAULT_MAX_ATTEMPTS[activity.kind];
 }
 
-/** A task is correct once any attempt is correct, failed once its attempts are used up, else open. */
+/**
+ * A task is correct once any attempt is correct. Otherwise it stays open until its attempts are used up;
+ * in guided and challenge activities it then gets one remediated retry (attempts counted afresh) before it
+ * is failed (doc 06 "Repeated-failure policy"). Micro-task attempts never count here.
+ */
 export function taskStatus(activity: Activity, task: Task, attempts: AttemptRecord[]): "correct" | "failed" | "open" {
   const mine = attempts.filter((a) => a.taskId === task.id && !a.microTask);
   if (mine.some((a) => a.outcome === "correct")) return "correct";
-  return mine.length >= maxAttemptsFor(activity, task) ? "failed" : "open";
+  const max = maxAttemptsFor(activity, task);
+  if (mine.filter((a) => !a.remediated).length < max) return "open";
+  if (activity.kind !== "guided" && activity.kind !== "challenge") return "failed";
+  return mine.filter((a) => a.remediated).length < max ? "open" : "failed";
 }
 
 /** First task in `activity` that is neither correct nor failed, or `null`. */

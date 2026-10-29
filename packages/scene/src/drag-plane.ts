@@ -110,6 +110,8 @@ export type GrabEndResult = Extract<SceneEvent, { type: "place" } | { type: "dro
  *   socket search entirely, settle in place, return drop with cause "lost".
  *   A place can never result from a loss; the engine discards cause "lost" drops.
  * The scene owns no grace timer of its own.
+ * A release before the part moved is not an action (doc 11 "Pre-commit states"): the part keeps its socket
+ * and the result has no event, so a click or a pinch-and-let-go never becomes a place or drop.
  */
 export function endGrab(
   grab: GrabState,
@@ -117,9 +119,14 @@ export function endGrab(
   sockets: readonly Socket[],
   occupancy: SocketOccupancy,
   t: number,
-): { event: GrabEndResult; snapTo: Socket | null } {
+  viewDir?: Vector3,
+): { event: GrabEndResult | null; snapTo: Socket | null } {
   const { componentId, object } = grab;
-  const socket = reason === "release" ? nearestAcceptingSocket(object, sockets, occupancy) : null;
+  if (reason === "release" && object.position.distanceToSquared(grab.startPosition) < 1e-12) {
+    if (grab.detachedFromSocketId) occupancy[grab.detachedFromSocketId] = componentId;
+    return { event: null, snapTo: null };
+  }
+  const socket = reason === "release" ? nearestAcceptingSocket(object, sockets, occupancy, viewDir) : null;
   if (socket) {
     occupancy[socket.id] = componentId;
     return { event: { type: "place", componentId, socketId: socket.id, t }, snapTo: socket };

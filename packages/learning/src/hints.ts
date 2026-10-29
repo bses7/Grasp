@@ -21,11 +21,9 @@ export const FALLBACK_HINT_TEMPLATE = "That was the {actualName}. Look for a dif
  * - A hint with `tutor: true` is a *request* for the HUD to call `/api/tutor`;
  *   this package never calls the network. The hint's `text` or `highlight`,
  *   or `FALLBACK_HINT_TEMPLATE`, is the offline fallback.
- *
- * Phase D (M8).
  */
 export function nextHint(task: Task, hintsUsed: number): Hint | null {
-  void task;
-  void hintsUsed;
-  throw new Error("TODO Phase D: nextHint (doc 06, doc 13 Phase 4: hint ladder)");
+  if (hintsUsed >= MAX_HINT_LEVEL) return null;
+  // Lowest authored level above what was shown; a ladder may skip a level (challenge tasks carry level 1 only).
+  return [...task.hints].sort((a, b) => a.level - b.level).find((h) => h.level > hintsUsed) ?? null;
 }

@@ -5,7 +5,7 @@
  * are designed in doc 09 and arrive with the V1 content migration; in MVP every reference to them is a text id.
  *
  * Conventions (doc 09): plural snake_case tables, `id uuid` PK, `created_at timestamptz`, `t integer` is ms since
- * session start as emitted by the client, every MVP table cascades from research_sessions, no identity columns.
+ * session start as emitted by the client, every MVP table except consent_records cascades from research_sessions, no identity columns.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -44,7 +44,10 @@ export const researchSessions = pgTable(
     lessonHash: text("lesson_hash").notNull(),
     appVersion: text("app_version").notNull(),
     startedAt: ts("started_at").notNull(),
+    /** Stamped by PATCH /api/session/:id when the lesson reaches its results; null means left before them. */
     endedAt: ts("ended_at"),
+    /** Tasks the learner skipped from the remediation card, so a reload does not offer them again. */
+    skippedTaskIds: text("skipped_task_ids").array().notNull().default(sql`'{}'::text[]`),
     calibrationAccuracy: numeric("calibration_accuracy", { precision: 4, scale: 3 }),
     s2Completed: boolean("s2_completed").notNull().default(false),
     createdAt: createdAt(),
@@ -56,12 +59,15 @@ export const researchSessions = pgTable(
   ],
 );
 
-/** Proof of consent without identity; retained with withdrawn_at after a cascade delete. */
+/**
+ * Proof of consent without identity; retained with withdrawn_at after the session's data is deleted, so
+ * session_id is a plain uuid, not a foreign key (doc 09 open question 4, decided in step 4.6).
+ */
 export const consentRecords = pgTable(
   "consent_records",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id").notNull().references(() => researchSessions.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").notNull(),
     consentVersion: text("consent_version").notNull(),
     /** Gates event_logs writes; the client logger drops events when false. */
     consentLogging: boolean("consent_logging").notNull(),
@@ -78,7 +84,7 @@ export const consentRecords = pgTable(
 export const eventLogs = pgTable(
   "event_logs",
   {
-    /** Client-generated so a retried batch is idempotent via on conflict do nothing. */
+    /** Server default; a retried batch is idempotent through the unique (session_id, seq) and on conflict do nothing. */
     id: uuid("id").primaryKey().defaultRandom(),
     sessionId: uuid("session_id").notNull().references(() => researchSessions.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),

@@ -13,15 +13,23 @@ import { Euler, Quaternion, Vector3, type Object3D } from "three";
 
 export type SocketOccupancy = Record<string, string | null>;
 
+/** Snap forgiveness: a part snaps within radius x this, so "close" is enough (user feedback 2026-10-29). */
+export const SNAP_TOLERANCE = 1.5;
+
 /**
  * Nearest socket whose `accepts` includes the component and whose distance to
- * the component origin is under `radius`. Returns null when none qualifies.
- * Called only from endGrab with reason "release"; never during a drag.
+ * the component origin is under `radius * SNAP_TOLERANCE`. Returns null when none qualifies.
+ * With `viewDir` (the camera's forward), depth along it is ignored: the drag plane faces the camera, so the
+ * learner can line a part up on screen but cannot change its depth, and a depth gap must not block the snap.
+ * Nearest wins, so overlapping ranges (aorta and pulmonary artery sockets) still pick the closer one.
+ * Called by endGrab on release, and on each grab_move to light the ring the part would snap into
+ * (a few sockets, so the per-frame cost is negligible).
  */
 export function nearestAcceptingSocket(
   component: Object3D,
   sockets: readonly Socket[],
   occupancy: SocketOccupancy = {},
+  viewDir?: Vector3,
 ): Socket | null {
   const id = component.userData.componentId as string | undefined;
   if (!id) return null;
@@ -30,9 +38,10 @@ export function nearestAcceptingSocket(
   for (const s of sockets) {
     const occupant = occupancy[s.id];
     if (!s.accepts.includes(id) || (occupant && occupant !== id)) continue;
-    const [x, y, z] = s.transform.position;
-    const d = component.position.distanceTo(new Vector3(x, y, z));
-    if (d < s.radius && d < bestDist) [best, bestDist] = [s, d];
+    const gap = component.position.clone().sub(new Vector3(...s.transform.position));
+    if (viewDir) gap.addScaledVector(viewDir, -gap.dot(viewDir));
+    const d = gap.length();
+    if (d < s.radius * SNAP_TOLERANCE && d < bestDist) [best, bestDist] = [s, d];
   }
   return best;
 }

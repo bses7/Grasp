@@ -84,14 +84,14 @@
     {
       "id": "socket_aorta",
       "transform": { "position": [1.177, 6.937, -1.038], "rotation": [0, 0, 0] },
-      "radius": 1.5,
+      "radius": 2,
       "accepts": ["aorta", "pulmonary_artery"],
       "visual": "ghost"
     },
     {
       "id": "socket_pulmonary_artery",
       "transform": { "position": [1.224, 5.441, 0.629], "rotation": [0, 0, 0] },
-      "radius": 1.5,
+      "radius": 2,
       "accepts": ["aorta", "pulmonary_artery"],
       "visual": "ghost"
     },
@@ -128,26 +128,66 @@
     {
       "id": "hs_lv_wall",
       "componentId": "left_ventricle",
-      "localPosition": [0.8, 0, 0.4],
+      "localPosition": [-0.6, 0.6, 2.63],
       "label": "Thick muscular wall",
       "kind": "info",
       "body": "The left ventricle wall is about three times thicker than the right because it pumps against systemic pressure."
+    },
+    {
+      "id": "hs_rv",
+      "componentId": "right_ventricle",
+      "localPosition": [0.6, 0.6, 3.13],
+      "label": "Right Ventricle",
+      "kind": "info",
+      "body": "Pumps deoxygenated blood into the pulmonary artery."
+    },
+    {
+      "id": "hs_la",
+      "componentId": "left_atrium",
+      "localPosition": [0, -0.6, 2.31],
+      "label": "Left Atrium",
+      "kind": "info",
+      "body": "Receives oxygenated blood from the pulmonary veins."
+    },
+    {
+      "id": "hs_ra",
+      "componentId": "right_atrium",
+      "localPosition": [0, -0.6, 2.6],
+      "label": "Right Atrium",
+      "kind": "info",
+      "body": "Receives deoxygenated blood from the venae cavae."
+    },
+    {
+      "id": "hs_aorta",
+      "componentId": "aorta",
+      "localPosition": [-0.6, 0, 2.93],
+      "label": "Aorta",
+      "kind": "info",
+      "body": "Largest artery; carries oxygenated blood to the body."
+    },
+    {
+      "id": "hs_pa",
+      "componentId": "pulmonary_artery",
+      "localPosition": [0, -0.6, 1.79],
+      "label": "Pulmonary Artery",
+      "kind": "info",
+      "body": "Carries deoxygenated blood from the right ventricle to the lungs."
     }
   ],
   "poses": {
     "assembled": {},
     "exploded": {
-      "left_ventricle": { "position": [8, -6, 2], "rotation": [0, 0, 0] },
-      "right_ventricle": { "position": [-8, -6, 2], "rotation": [0, 0, 0] },
-      "left_atrium": { "position": [8, 6, -2], "rotation": [0, 0, 0] },
-      "right_atrium": { "position": [-8, 6, -2], "rotation": [0, 0, 0] },
-      "aorta": { "position": [3, 12, 0], "rotation": [0, 0, 0.2] },
-      "pulmonary_artery": { "position": [-4, 11, 2], "rotation": [0, 0, -0.3] }
+      "left_ventricle": { "position": [9, -5, -0.325], "rotation": [0, 0, 0] },
+      "right_ventricle": { "position": [-8, -5, -0.26], "rotation": [0, 0, 0] },
+      "left_atrium": { "position": [9, 7, -0.868], "rotation": [0, 0, 0] },
+      "right_atrium": { "position": [-9, 7, -1.859], "rotation": [0, 0, 0] }
     },
     "start": {
-      "aorta": { "position": [-12, 7, -1.038], "rotation": [0, 0, 0] },
-      "pulmonary_artery": { "position": [-12, 0, 0.629], "rotation": [0, 0, 0] },
+      "aorta": { "position": [-13, -1, -1.038], "rotation": [0, 0, 0] },
+      "pulmonary_artery": { "position": [-13, -8, 0.629], "rotation": [0, 0, 0] },
       "left_ventricle": { "position": [12, -2, -0.325], "rotation": [0, 0, 0] }
-    }
+    },
+    "aorta_detached": { "aorta": { "position": [-13, -1, -1.038], "rotation": [0, 0, 0] } },
+    "pa_detached": { "pulmonary_artery": { "position": [-13, -8, 0.629], "rotation": [0, 0, 0] } }
   }
 }
