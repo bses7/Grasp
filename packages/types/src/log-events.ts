@@ -42,7 +42,7 @@ export type LogEvent = {
  * task_start        { taskId, taskType, objectiveId, activityId, activityKind }
  * task_attempt      { taskId, taskType, attemptNo, correct, partial, score, hintsUsed, componentId, socketId }
  * task_end          { taskId, outcome: "correct" | "incorrect" | "skipped" }
- * hint_shown        { taskId, level, source: "static" | "tutor" }
+ * hint_shown        { taskId, level, source: "static" | "tutor" }   // always "static" in MVP; tutor use is read from tutor_message
  * mastery_computed  { objectiveId, mastery, threshold }
  * time_prompt       { lessonMs, activityId, taskId, choice: "continue" | "assess" }   // once, at 15 min
  * select            { componentId, hotspotId, method: "grab" | "dwell" | "click" }   // absent id logged as null

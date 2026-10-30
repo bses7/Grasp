@@ -38,6 +38,11 @@ export class SessionLogger {
   }
 
   log(type: LogEventType, payload: LogPayload, now: number): LogEvent {
+    // The type allows only scalars, but a wider object passed through still type-checks; /api/events would then
+    // reject the whole batch and every batch queued behind it. Refuse it here, before it takes a seq.
+    for (const [k, v] of Object.entries(payload)) {
+      if (v !== null && typeof v === "object") throw new Error(`${type}.${k}: log payloads are scalar only`);
+    }
     const e: LogEvent = { sessionId: this.sessionId, condition: this.condition, seq: this.seq++, t: Math.round(now - this.t0), type, payload };
     this.events.push(e);
     this.sink?.(e);

@@ -10,6 +10,8 @@ import { CvStatusTracker } from "./cv-status";
 import { FeatureExtractor } from "./features";
 import { GestureFsm, type GestureFeatures } from "./gesture-fsm";
 import { JitterMeter } from "./jitter";
+import { CircleDetector } from "./circle";
+import { TwoHandGesture } from "./two-hand";
 import { createHandLandmarker, type HandLandmarker, type LandmarkerDelegate } from "./landmarker";
 import { handSize, Landmark, type HandLandmarks } from "./landmarks";
 
@@ -32,8 +34,12 @@ const SAME_HAND_DIST = 0.15;
 type Hand = { l: HandLandmarks; presence: number; box: number; size: number };
 
 export class VisionPipeline {
-  private readonly fsm = new GestureFsm();
+  private readonly fsm: GestureFsm;
   private readonly extractor = new FeatureExtractor();
+  /** The second hand, for two-hand gestures only. */
+  private readonly extractor2 = new FeatureExtractor();
+  private readonly twoHand = new TwoHandGesture();
+  private readonly circle = new CircleDetector();
   private readonly jitterMeter = new JitterMeter();
   private readonly status = new CvStatusTracker();
   private readonly lumCtx: OffscreenCanvasRenderingContext2D | null;
@@ -45,7 +51,10 @@ export class VisionPipeline {
   private constructor(
     private readonly landmarker: HandLandmarker,
     readonly delegate: LandmarkerDelegate,
+    /** Fist turn and two-hand gestures: dev and dev sessions only, never pilot or main study. */
+    private readonly extras: boolean,
   ) {
+    this.fsm = new GestureFsm(extras);
     const { width, height } = V.LUMINANCE_SAMPLE;
     this.lumCtx =
       typeof OffscreenCanvas === "undefined"
@@ -53,9 +62,9 @@ export class VisionPipeline {
         : new OffscreenCanvas(width, height).getContext("2d", { willReadFrequently: true });
   }
 
-  static async create(): Promise<VisionPipeline> {
+  static async create(extras = false): Promise<VisionPipeline> {
     const { landmarker, delegate } = await createHandLandmarker();
-    return new VisionPipeline(landmarker, delegate);
+    return new VisionPipeline(landmarker, delegate, extras);
   }
 
   /** `t` must strictly increase between calls (VIDEO running mode). */
@@ -85,14 +94,27 @@ export class VisionPipeline {
       this.extractor.reset();
     }
 
-    messages.push(...this.fsm.step(features, t));
+    const second = this.extras && usable ? this.secondHand(hands, usable) : null;
+    const f2 = second ? this.extractor2.extract(second.l, second.presence, t).features : null;
+    if (!f2) this.extractor2.reset();
+    const wasTwo = this.twoHand.active;
+    const two = this.twoHand.step(features, f2, this.fsm.hoveredId !== null, t);
+    if (two && !wasTwo) messages.push(...this.fsm.suspend(t));
+    messages.push(...(two ?? this.fsm.step(features, t)));
+    if (this.extras) {
+      // Easter egg: only a neutral or pointing hand draws (never mid-grab, turn or two-hand gesture).
+      const drawing = !two && features && (this.fsm.state === "IDLE" || this.fsm.state === "HOVER") ? features.cursor : null;
+      const spell = this.circle.step(drawing, t);
+      if (spell) messages.push(spell);
+    }
 
     if (features && this.fsm.state === "IDLE") jitter = this.jitterMeter.push(features.cursor.x, features.cursor.y, t);
     else this.jitterMeter.reset();
 
     const s = this.status.update(
       {
-        handCount: hands.length,
+        // Two hands are expected with extra gestures, so no "show one hand" hint.
+        handCount: this.extras ? Math.min(hands.length, 1) : hands.length,
         primaryBoxFrac: primary?.box ?? null,
         presence: primary?.presence ?? 0,
         luminance: this.luminance,
@@ -130,6 +152,19 @@ export class VisionPipeline {
     pick ??= hands.reduce<Hand | null>((a, h) => (!a || h.size > a.size ? h : a), null);
     this.primaryWrist = pick ? { x: pick.l[Landmark.WRIST]!.x, y: pick.l[Landmark.WRIST]!.y } : null;
     return pick;
+  }
+
+  /** The other in-range hand of about the same size (same person), or null. */
+  private secondHand(hands: Hand[], primary: Hand): Hand | null {
+    return (
+      hands.find(
+        (h) =>
+          h !== primary &&
+          h.box >= V.HAND_BOX_MIN_FRAC &&
+          h.box <= V.HAND_BOX_MAX_FRAC &&
+          Math.abs(h.size - primary.size) / primary.size <= V.HAND_SIZE_MATCH_FRAC,
+      ) ?? null
+    );
   }
 
   /** Mean Rec. 709 luma of a 32x18 downsample; the pixels are discarded immediately. */

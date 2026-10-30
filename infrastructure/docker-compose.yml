@@ -36,6 +36,30 @@ services:
               count: all
               capabilities: [gpu]
 
+  # Browser database UI (CloudBeaver Community, free): http://localhost:8978. Opt-in: `pnpm db:ui`.
+  # Dev only: bound to 127.0.0.1, anonymous access to the one preconfigured local connection (the same
+  # postgres/postgres credentials as above). Never point it at Neon or any database holding participant data
+  # outside this machine. The connection file is copied into the workspace on first start only.
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:24.3.0
+    container_name: grasp-cloudbeaver
+    profiles: [dbui]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CB_SERVER_NAME: Grasp local DB
+      CB_SERVER_URL: http://localhost:8978
+      CB_ADMIN_NAME: cbadmin
+      CB_ADMIN_PASSWORD: Grasp-local-1
+      CLOUDBEAVER_APP_GRANT_CONNECTIONS_ACCESS_TO_ANONYMOUS_TEAM: "true"
+    ports:
+      - "127.0.0.1:8978:8978"
+    volumes:
+      - cloudbeaver:/opt/cloudbeaver/workspace
+      - ./cloudbeaver-data-sources.json:/opt/cloudbeaver/conf/initial-data-sources.conf:ro
+
 volumes:
   pgdata:
   ollama:
+  cloudbeaver:

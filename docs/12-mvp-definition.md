@@ -6,7 +6,7 @@ The MVP is one twelve-minute heart lesson, `anatomy.heart.chambers_v1`, on one m
 
 The MVP exists to answer two questions and nothing else: can the core loop (gesture → interaction event → scene event → deterministic verdict → feedback) be learned from, and can a pilot study be run on it. Every row below either serves the loop or the pilot. The brief asks for "5–10 components, 3–5 gestures, basic AI tutor"; the MVP takes the upper end on components (ten, six movable) because `identify` tasks need distractors, the upper end on gestures (five) because `open_palm` and `point` are what make selection possible without a pinch, and the narrowest reading of "basic AI tutor" that the brief and locked position 7 allow.
 
-Two assumptions in the brief are weak and shape this scope. First, the brief treats the tutor as part of the core product; the pedagogy works with static hints, so the tutor is in the MVP only because the brief requires it, and it is flagged so the study can run with it off ([01](01-product-definition.md), [07](07-ai-tutor.md)). Second, the brief's MVP list omits a control condition; for this project the mouse path is not an accessibility extra but a hard **MVP** requirement, because without it the study cannot attribute anything to gesture input (locked position 8).
+Two assumptions in the brief are weak and shape this scope. First, the brief treats the tutor as part of the core product; the pedagogy works with static hints, so the tutor is in the MVP only because the brief requires it, and it can be switched off (`?tutor=off`, a developer parity switch the study build never sets) to show that the lesson works without it ([01](01-product-definition.md), [07](07-ai-tutor.md)). Second, the brief's MVP list omits a control condition; for this project the mouse path is not an accessibility extra but a hard **MVP** requirement, because without it the study cannot attribute anything to gesture input (locked position 8).
 
 ## MVP scope
 
@@ -118,7 +118,7 @@ Also **MVP** from [06](06-learning-engine.md): the three-level hint ladder with 
 
 | Element | MVP behaviour | Tier |
 |---|---|---|
-| Assessment activity | `act_assess`: four tasks, `maxAttempts: 1`, `hints: []`, sockets hidden, neutral "Recorded" feedback until the activity ends ([11](11-ui-ux.md#feedback-vocabulary)) | **MVP** |
+| Assessment activity | `act_assess`: four tasks, `maxAttempts: 1`, `hints: []`, sockets hidden, neutral "Recorded." feedback and never a burst; outcomes appear only on the results screen ([11](11-ui-ux.md#feedback-vocabulary)) | **MVP** |
 | Scoring | Per task from `scoring.correct` / `partial`; normalised by `scoring.correct` for mastery | **MVP** |
 | Objectives | `obj_identify_chambers` (remember, threshold 0.8), `obj_place_vessels` (apply, 0.8), `obj_blood_path` (analyze, 0.7) | **MVP** |
 | Mastery rule | Weighted mean of latest normalised scores across guided, challenge and assessment tasks, assessment at 2×; untouched tasks excluded | **MVP** |
@@ -135,7 +135,7 @@ Limitation: the in-lesson assessment evidences remember through analyze for stru
 | Attempts persisted | Posted to the attempts route as `lesson_attempts` rows with client ids (idempotent; beaconed on page close if unsaved); a reload resumes from them via `POST /api/session`; only the `sessionId` is kept in `localStorage`, as the cookie fallback | [06](06-learning-engine.md#runtime-position-and-persistence), [03](03-system-architecture.md) | **MVP** |
 | Progress row | Activity cursor and mastery per objective, upserted per session; in MVP both are recomputed from `lesson_attempts` | [09](09-database.md) | **V1** |
 | Research event log | Every `LogEvent` type in [14 §6.1](14-evaluation-methodology.md#61-schema), batched every 10 s or 50 events, `sendBeacon` on unload, end-of-session JSON download fallback, consent-gated twice: the client drops events and the server refuses them (403) without logging consent ([03 Session create and resume](03-system-architecture.md#session-create-and-resume)); the JSON download is offered only with that consent | logger | **MVP** |
-| Level path and results screen | Level path (stage n of m); mastery bands per objective (doc 08) with objective statements; per-task outcome list; "Review the parts you missed" in dev sessions only (never pilot or study, [06](06-learning-engine.md)) | [11](11-ui-ux.md) | **MVP** |
+| Level path and results screen | Level path (stage n of m); mastery bands per objective (doc 08) with objective statements; a list of missed tasks (skipped or never correct) under Review; a next-lesson line from the unlock rule; "Review the parts you missed" in dev sessions only (never pilot or study, [06](06-learning-engine.md)) | [11](11-ui-ux.md) | **MVP** |
 | Anonymous session | Client-generated `sessionId` UUID, validated and recorded by the server on first contact; condition locked per session; delete and export by `sessionId` | [03](03-system-architecture.md#authentication), [09](09-database.md) | **MVP** |
 
 Nothing above reads XP. The progress indicator is the only reward-adjacent element in the MVP.
@@ -147,14 +147,14 @@ Locked positions 5 and 7. Template design, the manifest fields it may quote, gua
 | Element | MVP scope | Tier |
 |---|---|---|
 | Engine | `TemplateTutorService` in `packages/tutor`: deterministic templates filled from the lesson hint ladder and manifest `description`, `relations` (`opposite_of`, `connects_to`), `tags`; runs inside the `/api/tutor` route handler, one same-origin round trip per call, no third-party egress. A locally run open-weights model (Ollama on the lab laptop or WebLLM) is **V1**, only after it meets the 3.5 s hint and 30 fps budgets | **MVP** engine, **V1** local model |
-| Call kinds | `hint` (when a task hint has `tutor: true`) and `explain_mistake` (after `incorrect` or `partial` in guided or challenge, or when the learner presses the "Explain" pill for the last attempt) | **MVP** |
-| Inputs | Task prompt, `expect`, engine `evaluation`, `SceneState`, hint level. Never video, landmarks, or a verdict to make. The MVP never accepts learner free text; the "Explain" pill is the only learner-initiated call, and the free-text "Ask tutor" pill is **V1** | **MVP** |
+| Call kinds | `explain_mistake` after every `incorrect` or `partial` attempt in guided or challenge (its text replaces the feedback card's), and `hint` when the learner requests a `tutor: true` hint that has no authored `text`. Every `tutor: true` hint in `chambers_v1` has text, so in the MVP lesson only `explain_mistake` calls are made. The "Explain" pill was dropped from MVP (user decision 2026-10-30): mistakes are already explained automatically and the 1-per-attempt cap would make a pill return only the static hint | **MVP** |
+| Inputs | Task prompt, `expect`, engine `evaluation`, `SceneState`, hint level. Never video, landmarks, or a verdict to make. The MVP never accepts learner free text; the only learner-initiated call is a requested `tutor: true` hint without authored `text`, and none exists in `chambers_v1`. The free-text "Ask tutor" pill is **V1** | **MVP** |
 | Output | ≤ 320 characters, structured JSON, manifest-only vocabulary, no reveal below level 3; validated server-side even though the template cannot produce anything else, so the check is identical for a **V1** engine | **MVP** |
-| Fallback | Static hint shown at 0 ms; the template result arrives from `/api/tutor` and replaces it; any cap, route failure or validation failure leaves the static hint in place with a logged `status` | **MVP** |
-| Call caps | 1 call per attempt, 3 per task, 12 per session, enforced in the route; kept not for cost (there is none) but so `ai_interactions` rows are comparable with a **V1** local engine | **MVP** |
-| Feature flag | `tutorEnabled` per session; off produces the identical lesson with static hints only | **MVP** |
+| Fallback | The static feedback or hint text is shown at 0 ms; the template result arrives from `/api/tutor` and replaces it; any cap, route failure, timeout or validation failure leaves the static text in place with a logged `tutor_message.status` | **MVP** |
+| Call caps | 1 call per attempt, 3 per task, 12 per lesson session, enforced in the route; kept not for cost (there is none) but so `ai_interactions` rows are comparable with a **V1** local engine | **MVP** |
+| Feature flag | `?tutor=off` on the lesson URL; off produces the identical lesson with static hints only. Not recorded per session (user decision 2026-10-30): the tutor is on in both study arms, so the study build never sets it | **MVP** |
 | Parity | No `condition` reaches the tutor; both study arms get identical behaviour when the flag is on | **MVP** |
-| Logging | `tutor_message` metadata in the event log; request and delivered text in `ai_interactions` only with consent | **MVP** |
+| Logging | `tutor_message` metadata in the event log and one `ai_interactions` row per call that reaches the route. The payload columns (request, response, delivered text) stay null: MVP does not ask `consent_tutor_payloads` (user decision 2026-10-30), because the text is rebuilt from the event log plus `research_sessions.lesson_hash` plus `template_version` | **MVP** |
 
 Pilot decision (resolved, see open questions): the tutor is on for both arms. Because the template engine is deterministic, it adds no non-reproducible component to a study whose lesson is otherwise reproducible from the event log.
 
@@ -208,7 +208,8 @@ The twelve items in [14 §8](14-evaluation-methodology.md#8-what-the-mvp-must-co
 | Dashboard and lesson map | **V1** | One lesson has nothing to map; the results screen covers progress |
 | Additional lessons and subjects (`anatomy.heart.valves_v1`, chemistry, mechanical) | **V1** | Second lesson arrives for study replication; new subjects only if they fit the five task types without engine changes |
 | Pose tracking | **Future** | Locked position 2; doubles inference cost and no heart task needs the body |
-| `fist`, `swipe`, `wrist_rotate`, `two_hand_scale` | **V1** | Each is a false-positive source with no MVP task that needs it; reset and navigation have HUD buttons ([04](04-computer-vision.md#mvp-and-postponed-set)) |
+| `swipe`, `wrist_rotate` | **V1** | Each is a false-positive source with no MVP task that needs it; reset and navigation have HUD buttons ([04](04-computer-vision.md#mvp-and-postponed-set)) |
+| `fist` (turn), `two_hand_scale`, `two_hand_explode`, `two_hand_twist` | **V1**; built outside the study (dev sessions only, user decision 2026-10-30) | Off under `studyParity` in pilot and main sessions and never logged, so both conditions keep the five MVP gestures ([04](04-computer-vision.md), [05](05-3d-interaction.md)) |
 | Per-component rotation and scaling | **V1** rotation; scaling never per component | Sockets supply rotation on snap; component scale has no learning value in anatomy |
 | XP, levels, badges, streaks beyond mastery bands | **V1**; daily streaks rejected outright | Reward pacing would differ between conditions and confound the study; evidence for retention benefit is weak ([08](08-gamification.md)) |
 | Tutor chat (free-text questions), concept explanation, progress summary | **V1** | A template engine cannot answer free text; needs the measured local model, injection hardening and a chat UI; not required to validate the loop |
@@ -246,8 +247,8 @@ The MVP is done when every row passes on the reference laptop (integrated GPU, I
 | A15 | Tracking stability | ≤ 2 `tracking_lost` per minute; lost fraction ≤ 0.05; jitter ≤ 0.005 | `tracking_*`, `perf_sample.jitterNorm` | 14 §2.1 |
 | A16 | Tracking loss never grades | No `place` emitted during or after `tracking_lost` until `tracking_regained` | Replay test on logged sessions | 00, 04, 05 |
 | A17 | Three placements first try | 3 of 3 correct within 2 minutes by a non-developer with a window behind them | Observed session | 00 |
-| A18 | Template tutor coverage and fallback | Every `tutor: true` hint and every `explain_mistake` in guided or challenge produces a row with `engine = template`; `status = ok` on 100% of uncapped calls; every cap or error leaves the static hint with a logged `status`. (The 3.5 s p95 latency bound is re-scoped to **V1**: it gates a local model before adoption and is not an MVP criterion) | `ai_interactions.engine`, `status` | 07 |
-| A19 | Tutor guardrails | 0 replies with a non-manifest id or an answer reveal below level 3 across the pilot; the template unit tests cover every task and hint level in the lesson | Template test suite; `ai_interactions` review | 07 |
+| A18 | Template tutor coverage and fallback | Every `explain_mistake` in guided or challenge (and every requested `tutor: true` hint without authored text) produces a `tutor_message` event; every call that reaches the route writes a row with `engine = template`, and no row has `status = fallback_invalid`; every cap (`ai_interactions.status = capped`), validation failure, timeout or network error (`tutor_message.status`) leaves the static text. What the learner saw is read from `tutor_message.source`, since a timed-out call can still leave a late `ok` row. (The 3.5 s p95 latency bound is re-scoped to **V1**: it gates a local model before adoption and is not an MVP criterion) | `tutor_message.status`, `source`; `ai_interactions.engine`, `status` | 07 |
+| A19 | Tutor guardrails | 0 replies with a non-manifest id or an answer reveal below level 3 across the pilot; the template unit tests cover every task and hint level in the lesson. Every guardrail failure becomes `fallback_invalid` and the static text, so a delivered reply passes by construction | Template test suite; count of `fallback_invalid` rows in `ai_interactions` | 07 |
 | A20 | Privacy invariants | No `fetch`, `sendBeacon` or IndexedDB write carries image data or landmark arrays during a lesson | Automated interception test | 14 §7 |
 | A21 | Consent and deletion | Consent precedes camera permission; `DELETE` by `sessionId` cascades across all research tables | Manual check; integration test | 14 §7, 03 |
 | A22 | Session fits the protocol | S1 ≤ 45 minutes including instruments; lesson ≤ 15 minutes | Pilot timing | 14 §3.2 |
@@ -278,7 +279,7 @@ The prototype's stop/go rule carries into the MVP unchanged: if a non-developer 
 
 ## Open questions
 
-1. Resolved 2026-10-04 (user decision), unchanged by the 2026-10-05 move to the template tutor: the tutor is **on for both arms** in the pilot, with the flag recorded per session; revisit only if `ai_interactions` shows guardrail failures above the A19 threshold.
+1. Resolved 2026-10-04 (user decision), unchanged by the 2026-10-05 move to the template tutor: the tutor is **on for both arms** in the pilot; since 2026-10-30 (user decision) the off switch is the `?tutor=off` URL flag and is not recorded per session, because the study build never sets it; revisit only if `ai_interactions` shows guardrail failures above the A19 threshold.
 2. Heart model: resolved to **adapt a CC-licensed model**; the candidate shortlist and licence check are recorded in `content/models/README.md` (Phase C) and the final pick is made at prototype milestone M9.
 
 ## Related

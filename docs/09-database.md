@@ -98,7 +98,7 @@ erDiagram
   }
 ```
 
-Cardinalities worth stating in words: one `research_sessions` row is one participant-session and owns every other MVP row through `session_id`; a lesson has many attempts but an attempt belongs to exactly one task of one lesson; `progress` has one row per (session, lesson, objective); `ai_interactions` has one row per tutor call, including capped calls and fallbacks where the engine produced nothing and the static hint was shown.
+Cardinalities worth stating in words: one `research_sessions` row is one participant-session and owns every other MVP row through `session_id`; a lesson has many attempts but an attempt belongs to exactly one task of one lesson; `progress` has one row per (session, lesson, objective); `ai_interactions` has one row per tutor call that reached the route, including capped calls and guardrail fallbacks where the static hint was answered; a call that failed in the browser usually has no row, but a timeout aborts only the client, so a slow route can still insert a late row that no `tutor_message` can join (its `interactionId` is null).
 
 ## Tier summary
 
@@ -116,7 +116,7 @@ Cardinalities worth stating in words: one `research_sessions` row is one partici
 | `lessons`, `activities`, `tasks` | **V1** | `content/lessons/**/<lessonId>.json`; ids `anatomy.heart.chambers_v1`, `act_guided`, `t_g3` | `lesson-schema` |
 | `models`, `components` | **V1** | `content/models/<modelId>.json`; ids `heart_v1`, `left_ventricle` | `lesson-schema` |
 | `assessments` | **V1** | `content/instruments/<form>.json` (knowledge forms A/B/C, SUS, TLX) | this doc, [14 section 3.2](14-evaluation-methodology.md#32-protocol) |
-| `achievements` | **V1** | nothing; study sessions hide rewards | [08](08-gamification.md) |
+| `achievements` | **V1** | nothing; only `learner` sessions get rewards, so pilot, main and dev sessions compute none and write no rows | [08](08-gamification.md) |
 
 In MVP, every reference into a V1 content table is a text column holding the file-based id. The id vocabulary is already fixed by the `lesson-schema` skill, so the V1 migration adds foreign keys without rewriting any row.
 
@@ -146,7 +146,7 @@ One row per participant-session. In MVP a session runs exactly one lesson, so th
 | `participant_code` | text | yes | unique | 6-character random code from an unambiguous alphabet (no `0`/`O`, `1`/`I`), printed for the participant; resolves the session for the S2 retention page and deletion requests; not identity |
 | `assignment_code` | text | no | unique | pre-assigned code from the researcher's offline blocked-randomisation list, entered on the consent screen; format `<phase><condition>-<number>` (phase `P`/`S`/`D`, condition `G`/`M`, e.g. `PG-014`; [03 Session create and resume](03-system-architecture.md#session-create-and-resume)); unique, so a study code is single-use (409 on reuse); dev codes `DG`/`DM` are stored as `<code>-<first 8 chars of id>` so they can be reused; the app never randomises |
 | `condition` | text | no | check in (`gesture`, `mouse`) | derived from `assignment_code` on the server |
-| `study_phase` | text | no | check in (`pilot`, `main`, `dev`) | derived from `assignment_code`; `dev` rows are excluded from every analysis and purged freely |
+| `study_phase` | text | no | check in (`pilot`, `main`, `dev`) | derived from `assignment_code`; `dev` rows are excluded from every analysis and purged freely. **V1**: the check gains `learner`, which the server sets when no assignment code is entered (a signed-in user's ordinary session, not research data); only `learner` sessions carry rewards ([08 study-flag rule](08-gamification.md#study-flag-rule)) |
 | `consent_version` | text | no | | the consent text version accepted (`pilot-v1`, `CONSENT_VERSION` in `apps/web/lib/consent.ts`); resume requires a `consent_records` row with this version |
 | `lesson_id` | text | no | | `anatomy.heart.chambers_v1` |
 | `lesson_hash` | text | no | | `contentHash` of lesson plus manifest at session creation, per [doc 10](10-3d-content-system.md#content-versioning); on resume a differing current hash is reported as `contentChanged` |
@@ -170,7 +170,7 @@ Proof of consent without identity. Kept separate from `research_sessions`, with 
 | `session_id` | uuid | no | plain uuid, no FK | open question 4; dropped in `0001_consent_retained.sql` |
 | `consent_version` | text | no | | |
 | `consent_logging` | boolean | no | | the separate, unticked-by-default event-log opt-in. Gates `event_logs` writes twice: `POST /api/session` returns it as `consentLogging` and the client `LogBuffer` drops events while it is false; `/api/events` answers 403 unless a non-withdrawn row has it true |
-| `consent_tutor_payloads` | boolean | no | | gates `ai_interactions.request_json`, `response_json`, `delivered_text` per doc 07. Written `false` until the tutor ships (Phase 5); asking for it then means a new consent version |
+| `consent_tutor_payloads` | boolean | no | | gates `ai_interactions.request_json`, `response_json`, `delivered_text` per doc 07. Always written `false` in **MVP**: the consent form (`pilot-v1`) does not ask for it, because the tutor text is rebuildable from the event log plus `research_sessions.lesson_hash` plus `ai_interactions.template_version` (user decision 2026-10-30), so the payload columns stay null. The rebuild holds only for sessions with `consent_logging`; without it, only the `ai_interactions` row metadata remains. Asking for it later means a new consent version |
 | `agreed_at` | timestamptz | no | | |
 | `withdrawn_at` | timestamptz | yes | | stamped by `withdrawSession` in the same transaction that deletes the session |
 | `created_at` | timestamptz | no | | |
@@ -225,7 +225,7 @@ One row per `task_attempt`. The columns are the attempt record the engine guaran
 | `user_id` | uuid | yes | FK `users.id` set null | **V1** |
 | `lesson_id` | text | no | | |
 | `lesson_hash` | text | no | | |
-| `activity_id` | text | no | | `act_guided` |
+| `activity_id` | text | no | | `act_guided`. **V1**: review-quest attempts use the reserved prefix `quest:<yyyy-mm-dd>:<n>` (`n` is the quest's task count) and keep their task's own `lesson_id`; the content validator rejects authored activity ids starting with `quest:` ([08 review quests](08-gamification.md#review-quests)) |
 | `activity_kind` | text | no | check in (`guided`, `challenge`, `assessment`) | introduction and explore have no tasks; mastery weight is derived from this |
 | `task_id` | text | no | | `t_g3` |
 | `task_type` | text | no | check in (`identify`, `place`, `remove`, `sequence`, `compare`) | |
@@ -272,7 +272,7 @@ Per-objective mastery, one row per (session, lesson, objective). **MVP** does no
 |---|---|---|---|---|
 | `id` | uuid | no | PK | |
 | `session_id` | uuid | no | FK cascade | |
-| `user_id` | uuid | yes | FK `users.id` set null | **V1**; in V1 mastery persists across sessions per user and this becomes the row key |
+| `user_id` | uuid | yes | FK `users.id` set null | **V1**; links a user's sessions. The row key stays `(session_id, lesson_id, objective_id)`, so mastery from a study session never merges into a learner's; per-user views and reward reads join through `research_sessions` and keep only `learner` sessions ([08 study-flag rule](08-gamification.md#study-flag-rule)) |
 | `lesson_id` | text | no | | |
 | `lesson_hash` | text | no | | |
 | `objective_id` | text | no | | |
@@ -286,7 +286,7 @@ Per-objective mastery, one row per (session, lesson, objective). **MVP** does no
 
 Constraint: unique `(session_id, lesson_id, objective_id)`. XP is not a column here or anywhere in MVP; doc 08's one-way rule holds because nothing in this table can be read by the unlock logic except `mastered`.
 
-### `ai_interactions` (MVP; payload columns MVP with consent)
+### `ai_interactions` (MVP; payload columns null in MVP, V1 with a new consent version)
 
 Columns are taken verbatim from [AI Tutor](07-ai-tutor.md#the-ai_interactions-table); only the FK target is filled in.
 
@@ -302,8 +302,8 @@ Columns are taken verbatim from [AI Tutor](07-ai-tutor.md#the-ai_interactions-ta
 | `kind` | text | no | check in (`hint`, `explain_mistake`, `question`, `summary`) | |
 | `hint_level` | smallint | yes | check 1..3 | |
 | `engine` | text | no | | `template` in **MVP**; `local:<name>` for a **V1** local open-weights engine (`<name>` is the local runtime's own identifier, never a hosted vendor or model id) |
-| `template_version` | text | yes | | `@grasp/tutor` package version that produced the text; null for V1 local-model rows |
-| `status` | text | no | check in (`ok`, `fallback_timeout`, `fallback_error`, `fallback_invalid`, `capped`) | |
+| `template_version` | text | yes | | the `TEMPLATE_VERSION` constant in `packages/tutor/src/constants.ts` (currently `"1"`), bumped whenever template wording changes; not the package version. Null for **V1** `local:*` rows |
+| `status` | text | no | check in (`ok`, `fallback_timeout`, `fallback_error`, `fallback_invalid`, `capped`) | The **MVP** route writes only `ok`, `capped`, `fallback_invalid`. `fallback_timeout` and `fallback_error` happen in the browser, so in **MVP** they appear only in the `tutor_message` LogEvent with a null `interactionId`, usually with no row (a slow route can still insert a late, unjoinable row after the client timeout); the check keeps them for a **V1** server-side engine |
 | `latency_ms` | integer | no | | milliseconds inside the route; single digits for `template` |
 | `usage_json` | jsonb | yes | | null in **MVP**; a **V1** local engine may store engine-specific diagnostics (context size, generation time) as one object, never cost |
 | `request_json` | jsonb | yes | | null unless `consent_tutor_payloads` |
@@ -330,7 +330,7 @@ Designed now so the ERD is complete and the MVP text ids are known to be suffici
 | `activities` | **V1** | `id` PK; `lesson_id` FK; `key text` (`act_guided`); `kind` check in the six kinds; `position smallint`; `narration jsonb`; `scene jsonb`; `completion jsonb`; unique `(lesson_id, key)` | |
 | `tasks` | **V1** | `id` PK; `activity_id` FK; `key text` (`t_g3`); `objective_id text`; `type` check in the five types; `prompt`; `expect jsonb`; `hints jsonb`; `max_attempts`; `time_limit_sec null`; `scoring jsonb`; `position smallint`; unique `(activity_id, key)` | Not one of the brief's thirteen but required by doc 10; `lesson_attempts.task_id` gains an FK to `tasks.key` scoped by lesson |
 | `assessments` | **V1** | `id` PK; `lesson_id` FK null; `instrument` check as in `instrument_responses`; `form` null; `items jsonb` (prompt, options, key); `version`; unique `(instrument, form, version)` | The instrument catalogue (knowledge forms A/B/C, SUS, TLX). `lesson_id` is null for SUS and TLX, which are lesson-independent |
-| `achievements` | **V1** | `id` PK; `user_id` FK cascade; `key text` (`mastered:obj_identify_chambers`, `lesson:anatomy.heart.chambers_v1`); `lesson_id text`; `awarded_at`; unique `(user_id, key)` | Award rows only; the catalogue of keys and titles is a config file per doc 08. Hidden during study sessions by the session flag |
+| `achievements` | **V1** | `id` PK; `user_id` FK cascade; `key text` (`mastered:obj_identify_chambers`, `lesson:anatomy.heart.chambers_v1`); `lesson_id text`; `awarded_at`; unique `(user_id, key)` | Award rows only; the catalogue of keys and titles is a config file per doc 08. Only `learner` sessions get rewards: pilot, main and dev sessions compute none and write no rows, and nothing is hidden. `POST /api/session` derives the reward layer from `research_sessions.study_phase` and returns it in the session boot; it is not stored. Only **V1** `learner` sessions get rewards ([08 study-flag rule](08-gamification.md#study-flag-rule)) |
 
 When these land, the migration adds `lessons.key`, `tasks.key`, and `models.key` as the targets of foreign keys from the MVP tables' text columns, which already hold exactly those values. `GET /api/content/lessons/:key` then serialises `lessons` plus `activities` plus `tasks` back into the `Lesson` JSON the engine already consumes.
 
@@ -354,7 +354,7 @@ Every foreign key column is indexed because cascade deletes scan them. Nothing e
 
 | Behaviour | Mechanism | Tier |
 |---|---|---|
-| Participant deletion | `withdrawSession` in `packages/db/src/privacy.ts`, in one transaction: stamps `consent_records.withdrawn_at`, then `delete from research_sessions where id = $1`, whose `on delete cascade` removes `event_logs`, `instrument_responses`, `lesson_attempts`, `ai_interactions` (and `progress` once it exists in V1); the `consent_records` row is retained as proof the request was honoured. Two callers: `DELETE /api/session/:id` (route in [03](03-system-architecture.md#authentication)), whose `id` must equal the `grasp_session` cookie (403 otherwise), which clears the cookie and writes one server log line (`session deleted`, no session id, no payload); and `pnpm research:delete <sessionId|participantCode|sessionCode>`\|participantCode>` (`scripts/research/delete-session.ts`) for a participant who has left the device and quotes the code. `findSession` resolves any of the three keys. Verified by the A21 integration test `packages/db/src/privacy.test.ts` against local Postgres (skipped when no database answers) | **MVP** |
+| Participant deletion | `withdrawSession` in `packages/db/src/privacy.ts`, in one transaction: stamps `consent_records.withdrawn_at`, then `delete from research_sessions where id = $1`, whose `on delete cascade` removes `event_logs`, `instrument_responses`, `lesson_attempts`, `ai_interactions` (and `progress` once it exists in V1); the `consent_records` row is retained as proof the request was honoured. Two callers: `DELETE /api/session/:id` (route in [03](03-system-architecture.md#authentication)), whose `id` must equal the `grasp_session` cookie (403 otherwise), which clears the cookie and writes one server log line (`session deleted`, no session id, no payload); and `pnpm research:delete <sessionId\|participantCode\|sessionCode>` (`scripts/research/delete-session.ts`) for a participant who has left the device and quotes the code. `findSession` resolves any of the three keys. Verified by the A21 integration test `packages/db/src/privacy.test.ts` against local Postgres (skipped when no database answers) | **MVP** |
 | Participant export | `exportSession` in the same file returns the six MVP tables for one session (`session`, `consent`, `attempts`, `events`, `instruments`, `tutor`) as one JSON document. Callers: `GET /api/session/:id/export` (cookie-gated like the delete, served as an attachment) and `pnpm research:export <sessionId\|participantCode\|sessionCode> [out.json]`. The end-of-session "Download event log" button on the results screen is separate: it saves the client's in-memory `LogEvent` list, not this export, and is shown only when the session has logging consent | **MVP** |
 | Study retention | Five years after publication, then `delete ... where study_phase = 'main' and started_at < $cutoff`; the date is written in the consent text and in `docs/` when the study is pre-registered | **MVP** policy, run by hand |
 | Dev and pilot purge | `study_phase = 'dev'` rows deleted on every deploy to the pilot environment; `pilot` rows kept until the pilot report is written, then deleted | **MVP** |

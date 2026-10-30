@@ -41,6 +41,8 @@ export function computeMastery(
     for (const { task, weight } of graded.filter((g) => g.task.objectiveId === o.id)) {
       const latest = attempts
         .filter((a) => a.taskId === task.id && !a.microTask)
+        // ponytail: `t` is ms since session start, so this orders within one session only; V1 cross-session mastery
+        // (review quests, doc 08) must order by lesson_attempts.created_at.
         .reduce<AttemptRecord | null>((best, a) => (!best || a.t >= best.t ? a : best), null);
       if (!latest) continue; // not attempted: excluded, never a false 0
       sum += Math.min(1, Math.max(0, latest.score / task.scoring.correct)) * weight;

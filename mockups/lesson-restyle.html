@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Grasp lesson restyle mockup</title>
 <!--
-  Static design mockup for the lesson HUD restyle (not app code). Three directions, switched at the top:
-  "Heart studio" (palette sampled from heart_v1's textures), "Sci-fi lab" and "Cozy cartoon" (sage green).
+  Static design mockup for the lesson HUD restyle (not app code). Four directions, switched at the top:
+  "Heart studio" (palette sampled from heart_v1's textures), "Sci-fi lab", "Cozy cartoon" (sage green) and
+  "Mystic sanctum" (sorcery look: ember-orange spell circles on deep indigo, inspired by film mystic-arts visuals).
   The heart is the real models/heart_v1/heart.glb, embedded in heart-glb.js and shown with <model-viewer>
   (drag to turn it); the background shapes stand in for cheap 3D props the scene would draw.
   Open this file directly in a browser.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Chakra+Petch:wght@500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Chakra+Petch:wght@500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;600&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
 <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 <script src="heart-glb.js"></script>
 <style>
@@ -51,6 +52,16 @@
     --radius: 18px; --btn-radius: 14px; --display: "Fraunces", Georgia, serif;
     --shadow: 0 0 0 1.5px #e4dccb, 0 10px 28px rgba(58,31,43,.16);
     --btn-shadow: 0 5px 0 #5e2224, 0 10px 18px rgba(94,34,36,.25);
+  }
+
+  /* Mystic sanctum: ember-orange spell circles on deep indigo */
+  .stage[data-theme="mystic"] {
+    --bg1: #07060f; --bg2: #1d1438; --ink: #f6ead2; --muted: #b5a68a;
+    --panel: rgba(18, 12, 34, .82); --panel-edge: #ff9a2e; --accent: #ff8a1f; --accent-ink: #1a0b00;
+    --ok: #7cf2c4; --warn: #ffc65c; --bad: #ff5e4a; --gold: #ffcf6b;
+    --radius: 4px; --btn-radius: 999px; --display: "Cinzel", Georgia, serif;
+    --shadow: 0 0 0 1px rgba(255,154,46,.55), 0 0 0 5px rgba(255,154,46,.08), 0 0 30px rgba(255,120,20,.22);
+    --btn-shadow: 0 0 0 2px #ffd08a inset, 0 0 22px rgba(255,138,31,.75), 0 0 48px rgba(255,90,0,.35);
   }
 
   /* ---------- stage ---------- */
@@ -107,6 +118,46 @@
   .stage[data-theme="studio"] .burst .big { color: var(--ok); text-shadow: 0 3px 0 #fbf8f1, 0 8px 20px rgba(58,31,43,.2); }
   .stage[data-theme="studio"] .cam .feed { background: linear-gradient(135deg, #d9d2c4, #efe9dd); }
   .stage[data-theme="studio"] .scrim { background: rgba(58,31,43,.28); }
+
+  /* Mystic backdrop: rotating sigils behind the heart, drifting embers, a spark portal at the edge */
+  .mystic-only { display: none; }
+  .stage[data-theme="mystic"] .mystic-only { display: block; }
+  .sigil { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #ff9a2e; filter: drop-shadow(0 0 6px #ff7a00) drop-shadow(0 0 18px rgba(255,110,0,.6)); }
+  .sigil.s1 { width: 560px; height: 560px; animation: turn 40s linear infinite; opacity: .5; }
+  .sigil.s2 { width: 400px; height: 400px; animation: turn 26s linear infinite reverse; opacity: .35; }
+  .sigil.s3 { width: 300px; height: 300px; left: 12%; top: 78%; animation: turn 18s linear infinite; opacity: .25; }
+  @keyframes turn { to { transform: translate(-50%, -50%) rotate(360deg); } }
+  .ember { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #ffcf6b; box-shadow: 0 0 8px 2px #ff7a00; animation: rise 7s linear infinite; }
+  @keyframes rise { from { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } to { transform: translate(30px, -260px); opacity: 0; } }
+  .portal { position: absolute; right: -90px; top: 8%; width: 260px; height: 260px; border-radius: 50%;
+    background: conic-gradient(#ffcf6b, transparent 12%, #ff7a00 20%, transparent 33%, #ffcf6b 45%, transparent 58%, #ff5a00 70%, transparent 85%, #ffcf6b);
+    -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%, #000 70%, transparent 72%); mask: radial-gradient(circle, transparent 60%, #000 62%, #000 70%, transparent 72%);
+    filter: drop-shadow(0 0 12px #ff7a00); animation: whirl 2.4s linear infinite; opacity: .7; }
+  @keyframes whirl { to { transform: rotate(360deg); } }
+  .stage[data-theme="mystic"] .model { filter: drop-shadow(0 0 22px rgba(255,138,31,.45)); }
+  .stage[data-theme="mystic"] .display { font-weight: 800; letter-spacing: .06em; }
+  .stage[data-theme="mystic"] .panel { border-top: 2px solid var(--panel-edge); }
+  .stage[data-theme="mystic"] .quest h2, .stage[data-theme="mystic"] .dialog h3, .stage[data-theme="mystic"] .results h3 { color: var(--gold); text-shadow: 0 0 14px rgba(255,138,31,.5); }
+  .stage[data-theme="mystic"] .node { background: rgba(255,154,46,.06); border: 1.5px solid rgba(255,154,46,.5); color: var(--muted); border-radius: 6px; }
+  .stage[data-theme="mystic"] .node.done { background: var(--accent); border-color: #ffd08a; color: var(--accent-ink); box-shadow: 0 0 12px var(--accent); }
+  .stage[data-theme="mystic"] .node.now { background: transparent; border: 2px solid var(--gold); color: var(--gold); box-shadow: 0 0 18px var(--accent), inset 0 0 12px var(--accent); }
+  .stage[data-theme="mystic"] .link { height: 2px; background: rgba(255,154,46,.35); opacity: 1; }
+  .stage[data-theme="mystic"] .link.done { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .stage[data-theme="mystic"] .gbtn { text-transform: uppercase; letter-spacing: .1em; font-size: 15px; }
+  .stage[data-theme="mystic"] .gbtn.ghost { background: rgba(18,12,34,.6); color: var(--ink); box-shadow: 0 0 0 1.5px rgba(255,154,46,.6) inset; }
+  .stage[data-theme="mystic"] .gbtn.gold { color: #2a1600; box-shadow: 0 0 0 2px #fff0c8 inset, 0 0 24px rgba(255,207,107,.7); }
+  .stage[data-theme="mystic"] .gbtn:active { box-shadow: 0 0 0 2px #ffd08a inset, 0 0 40px #ff8a1f; }
+  .stage[data-theme="mystic"] .socket { border: 2px dashed var(--gold); background: radial-gradient(circle, rgba(255,138,31,.3), transparent 65%);
+    box-shadow: 0 0 0 6px rgba(255,138,31,.15), 0 0 28px var(--accent), inset 0 0 18px var(--accent); animation: whirl 6s linear infinite; }
+  .stage[data-theme="mystic"] .cursor { border: 2px solid var(--gold); background: radial-gradient(circle, #fff3d6, rgba(255,138,31,.3) 60%); box-shadow: 0 0 14px var(--accent); }
+  .stage[data-theme="mystic"] .burst .big { color: var(--gold); text-shadow: 0 0 10px #ff8a1f, 0 0 36px #ff5a00; }
+  .stage[data-theme="mystic"] .spark { box-shadow: 0 0 10px 3px #ff7a00; }
+  .stage[data-theme="mystic"] .hint .lvl span { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .stage[data-theme="mystic"] .hint .lvl span.off { background: rgba(255,154,46,.2); box-shadow: none; }
+  .stage[data-theme="mystic"] .cam .feed { background: linear-gradient(135deg, #1a1230, #2c1d4a); }
+  .stage[data-theme="mystic"] .key b { border-color: rgba(255,154,46,.5); }
+  .stage[data-theme="mystic"] .scrim { background: radial-gradient(circle, rgba(29,20,56,.55), rgba(7,6,15,.85)); }
+  .stage[data-theme="mystic"] .bar i { background: linear-gradient(90deg, #ff5a00, var(--gold)); }
 
   /* ---------- the model (real heart_v1 via model-viewer) ---------- */
   .model { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 460px; }
@@ -235,6 +286,7 @@
   <button type="button" data-theme-btn="studio" aria-pressed="true">Heart studio</button>
   <button type="button" data-theme-btn="lab" aria-pressed="false">Sci-fi lab</button>
   <button type="button" data-theme-btn="cozy" aria-pressed="false">Cozy cartoon</button>
+  <button type="button" data-theme-btn="mystic" aria-pressed="false">Mystic sanctum</button>
   <span class="sep"></span>
   <b>Screen:</b>
   <button type="button" data-screen-btn="start" aria-pressed="false">Look around</button>
@@ -252,6 +304,24 @@
     <div class="rbc" style="width:28px;height:28px;left:22%;top:66%;animation-delay:-3s"></div>
     <div class="rbc" style="width:56px;height:56px;right:11%;top:58%;animation-delay:-5s"></div>
     <div class="rbc" style="width:22px;height:22px;right:22%;top:20%;animation-delay:-1.5s"></div>
+  </div>
+  <!-- backdrop: mystic -->
+  <div class="mystic-only" aria-hidden="true">
+    <svg width="0" height="0" style="position:absolute"><defs>
+      <path id="runepath" d="M100 22 a78 78 0 1 1 -0.1 0"/>
+      <g id="sigil">
+        <circle cx="100" cy="100" r="96" stroke-width="1.2"/><circle cx="100" cy="100" r="88" stroke-width=".6" stroke-dasharray="2 4"/>
+        <circle cx="100" cy="100" r="62" stroke-width="1"/><circle cx="100" cy="100" r="30" stroke-width="1.4"/>
+        <text font-size="7" fill="currentColor" stroke="none" letter-spacing="3"><textPath href="#runepath">&#x16A0; &#x16A2; &#x16A6; &#x16A8; &#x16B1; &#x16B2; &#x2736; &#x16B7; &#x16B9; &#x16BA; &#x16BE; &#x16C1; &#x16C3; &#x2736; &#x16C7; &#x16C8; &#x16C9; &#x16CA; &#x16CF; &#x16D2; &#x2736; &#x16D6; &#x16D7; &#x16DA; &#x16DC; &#x16DE; &#x16DF; &#x2736;</textPath></text>
+      </g>
+    </defs></svg>
+    <svg class="sigil s1" viewBox="0 0 200 200" fill="none" stroke="currentColor"><use href="#sigil"/></svg>
+    <svg class="sigil s2" viewBox="0 0 200 200" fill="none" stroke="currentColor"><use href="#sigil"/></svg>
+    <svg class="sigil s3" viewBox="0 0 200 200" fill="none" stroke="currentColor"><use href="#sigil"/></svg>
+    <div class="portal"></div>
+    <span class="ember" style="left:18%;top:85%"></span><span class="ember" style="left:30%;top:90%;animation-delay:-2s"></span>
+    <span class="ember" style="left:62%;top:88%;animation-delay:-4s"></span><span class="ember" style="left:78%;top:80%;animation-delay:-1s"></span>
+    <span class="ember" style="left:46%;top:95%;animation-delay:-5.5s"></span><span class="ember" style="left:88%;top:92%;animation-delay:-3s"></span>
   </div>
   <!-- backdrop: lab -->
   <div class="lab-only" aria-hidden="true">

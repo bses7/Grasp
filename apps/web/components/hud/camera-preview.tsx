@@ -15,6 +15,8 @@ import { useEffect, useRef, useState } from "react";
 export type CameraPreviewProps = {
   expanded: boolean;
   onVisionEvent: (event: InteractionEvent) => void;
+  /** Fist turn and two-hand gestures (dev and dev sessions; never pilot or main study). */
+  extraGestures?: boolean;
   onVisionReady: (handle: VisionHandle | null, camera?: { width: number; height: number }) => void;
   onCvStatus: (status: CvStatus | null) => void;
   onPerfSample: (sample: PerfSample) => void;
@@ -22,7 +24,7 @@ export type CameraPreviewProps = {
 
 type Status = "off" | "starting" | "running" | "failed";
 
-export function CameraPreview({ expanded, onVisionEvent, onVisionReady, onCvStatus, onPerfSample }: CameraPreviewProps) {
+export function CameraPreview({ expanded, extraGestures, onVisionEvent, onVisionReady, onCvStatus, onPerfSample }: CameraPreviewProps) {
   const video = useRef<HTMLVideoElement>(null);
   const dot = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
@@ -50,6 +52,7 @@ export function CameraPreview({ expanded, onVisionEvent, onVisionReady, onCvStat
         video: v,
         forceMainThread: new URLSearchParams(location.search).get("cv") === "main",
         showHands: true,
+        extraGestures,
         onMessage: (m) => {
           if (m.type === "hands") {
             const c = overlay.current;

@@ -190,3 +190,36 @@ describe("GestureFsm HOVER (point, Phase 4 step 4.0)", () => {
     expect(fsm.state).toBe("GRABBING");
   });
 });
+
+describe("GestureFsm extra gestures (outside the study)", () => {
+  const fist = (x: number): GestureFeatures => ({
+    ...hand(1.0, { x, y: 0.5 }),
+    extended: { index: false, middle: false, ring: false, pinky: false },
+    extendedCount: 0,
+    thumbExtended: false,
+  });
+
+  it("turns the model while a fist moves, then returns to IDLE", () => {
+    const { events, fsm } = replay([...open(4), fist(0.5), fist(0.5), fist(0.5), fist(0.5), fist(0.52), fist(0.55), ...open(4)], {
+      fsm: new GestureFsm(true),
+      grabbable: () => false, // a fist turns the model even over a part that cannot be grabbed
+    });
+    const turns = events.filter((e) => e.type === "model_turn");
+    expect(turns.map((e) => (e.type === "model_turn" ? Math.round(e.dx * 100) : 0))).toEqual([2, 3]);
+    expect(fsm.state).toBe("IDLE");
+  });
+
+  it("ignores the fist in study sessions", () => {
+    const { types } = replay([...open(4), ...repeat(8, fist(0.5))]);
+    expect(types).toEqual([]);
+  });
+
+  it("suspend ends a grab and makes the held pinch release before it grabs again", () => {
+    const fsm = new GestureFsm(true);
+    const { events } = replay([...open(5), ...pinched(3)], { fsm });
+    expect(events.at(-1)?.type).toBe("grab_start");
+    expect(fsm.suspend(500).map((e) => e.type)).toEqual(["grab_end"]);
+    const after = replay(pinched(4), { fsm });
+    expect(after.types).toEqual([]);
+  });
+});

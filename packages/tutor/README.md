@@ -2,7 +2,7 @@
 
 The tutor seam described in [docs/07-ai-tutor.md](../../docs/07-ai-tutor.md). In **MVP** this package is a deterministic template engine: it returns the authored hint for the current level and composes mistake explanations from manifest data (component `name`, `description`, `relations`, `tags`) through a typed template map. No network, no model, no paid or metered service at any tier.
 
-Phase C status: scaffold. The `TutorService` interface, constants, the template map and its test, the Zod response schema and its test are real. `TemplateTutorService` methods throw `TODO Phase D`; the V1 engines throw `TODO V1`.
+Status (roadmap Phase 5, 2026-10-30): `TemplateTutorService` and `staticFallback` are built and tested over every guided and challenge task of `chambers_v1` at every hint level (`template-tutor-service.test.ts`); `/api/tutor` in apps/web runs it. The V1 engines still throw `TODO V1`.
 
 ## Files
 
@@ -10,6 +10,7 @@ Phase C status: scaffold. The `TutorService` interface, constants, the template 
 |---|---|---|
 | `src/tutor-service.ts` | MVP | `TutorService` interface, `TutorKind`, `TutorEngine` (`"template" \| "local"`) |
 | `src/templates.ts` | MVP | `MISTAKE_TEMPLATES[taskType][outcome]`, `NARROW_CLAUSES`, `REVEAL_TEMPLATES`, `HINT_FALLBACK`, `fillTemplate`; the allowed placeholder set |
+| `src/template-tutor-service.test.ts` | MVP | Every tutored task x hint level x wrong part or socket within the guardrails; doc 07 worked examples 1-3; forged body and unknown ids |
 | `src/templates.test.ts` | MVP | Every (task type, outcome) key exists; only allowed placeholders; no reveal placeholder outside `REVEAL_TEMPLATES` |
 | `src/template-tutor-service.ts` | MVP | `TemplateTutorService`: resolves templates from the manifest and lesson supplied by the caller; pure, called by the `/api/tutor` route handler |
 | `src/response-schema.ts` | MVP | Zod `tutorResponseSchema`, `parseTutorResponse`; applied to every engine's output |

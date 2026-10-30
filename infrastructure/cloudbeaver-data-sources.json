@@ -1,0 +1,21 @@
+{
+  "folders": {},
+  "connections": {
+    "grasp-local": {
+      "provider": "postgresql",
+      "driver": "postgres-jdbc",
+      "name": "Grasp (local Postgres)",
+      "save-password": true,
+      "configuration": {
+        "host": "postgres",
+        "port": "5432",
+        "database": "grasp",
+        "url": "jdbc:postgresql://postgres:5432/grasp",
+        "type": "dev",
+        "auth-model": "native",
+        "user": "postgres",
+        "password": "postgres"
+      }
+    }
+  }
+}

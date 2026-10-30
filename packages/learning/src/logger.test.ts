@@ -14,6 +14,13 @@ describe("SessionLogger", () => {
     expect(e).toMatchObject({ seq: 1, t: 50 });
   });
 
+  it("refuses an object-valued payload before it takes a seq (it would block /api/events)", () => {
+    const log = new SessionLogger("s", "gesture", 0);
+    const reply = { interactionId: "i", status: "ok", source: "tutor", response: { text: "x" } };
+    expect(() => log.log("tutor_message", reply as never, 1)).toThrow(/scalar only/);
+    expect(log.log("hand_count", { n: 1 }, 2).seq).toBe(0);
+  });
+
   it("summarises a drag once, on grab_end, with path length, z-hint and time to first move", () => {
     const log = new SessionLogger("s", "gesture", 0);
     log.grabStart("aorta", { x: 0.1, y: 0.5 }, 100);

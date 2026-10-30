@@ -21,7 +21,7 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | 3 | Dashboard | Dashboard | **V1** | Yes |
 | 4 | Choose Subject | Choose subject | **V1** | Yes |
 | 5 | Choose Topic | Choose topic (lesson map) | **V1** | Yes |
-| 6 | Learning Environment | Learning environment | **MVP** | Yes; preview hidden, controls strip shows mouse glyphs |
+| 6 | Learning Environment | Learning environment | **MVP** | Yes; preview hidden, controls guide shows mouse key caps |
 | 7 | 3D Exploration | Learning environment, `explore` mode | **MVP** | Yes |
 | 8 | Interactive Tasks | Learning environment, `guided` and `challenge` modes | **MVP** | Yes |
 | 9 | Computer Vision Interaction | Hand-state HUD | **MVP** | No; mouse adapter replaces it |
@@ -90,7 +90,7 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | Aspect | Detail |
 |---|---|
 | Purpose | Put the learner in front of the model with a working input channel before any graded action |
-| Learner sees and does | Learning environment screen, full-bleed canvas, mission card (the instruction), level path (progress), hand-state chip, camera preview with the cursor dot, controls strip. First the 5-minute calibration tutorial: `open_palm` inside a silhouette, `point`, then `pinch` a practice cube into a ring, 20 scripted prompts. Then `act_intro`: three narration cards; the learner orbits the assembled heart with `pinch_drag` on empty space |
+| Learner sees and does | Learning environment screen, full-bleed canvas, mission card (the instruction), level path (progress), hand-state chip, camera preview with the cursor dot, controls guide. First the 5-minute calibration tutorial: `open_palm` inside a silhouette, `point`, then `pinch` a practice cube into a ring, 20 scripted prompts. Then `act_intro`: three narration cards; the learner orbits the assembled heart with `pinch_drag` on empty space |
 | System does | Calibration computes `calibHandSize` and `openPinch`, checks lighting and distance *before* the lesson ([04 calibration](04-computer-vision.md)), and gates on accuracy ≥ 0.80 or one re-run. Engine emits `activity_start` for `act_intro`; completion `{ continue: true }` (the learner presses "Continue →"); scene command `setPose("assembled")` |
 | Data produced | `calibration_prompt` ×20, `gesture_emit` on transitions, `hand_count`, `perf_sample` every 5 s, `activity_start`, `grab_start` with `componentId: null` for orbit |
 | Tier | **MVP**. Limitation: the tutorial costs 5 minutes of a 45-minute study session; it is kept because it burns novelty and gives the tracking-failure covariate a clean baseline |
@@ -101,7 +101,7 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | Aspect | Detail |
 |---|---|
 | Purpose | Build a spatial model of the parts, and pre-train names, before any task grades recognition (dual coding; reduces load in stage 8) |
-| Learner sees and does | `explore` mode: assembled pose, hotspot markers such as `hs_lv_wall` and `hs_rv`. Learner hovers with `point`; the component tints `highlight` and its name billboards above it; dwelling 600 ms on a hotspot opens its label. "Explain" pill (replays the hotspot description; free-text "Ask tutor" is **V1**) is available |
+| Learner sees and does | `explore` mode: assembled pose, hotspot markers such as `hs_lv_wall` and `hs_rv`. Learner hovers with `point`; the component tints `highlight` and its name billboards above it; dwelling 600 ms on a hotspot opens its label. The hotspot label shows the hotspot description; free-text "Ask tutor" is **V1** |
 | System does | Scene emits `select` with `hotspotId`; no scoring; the stage ends when the learner presses "Start the lesson →" (completion `{ continue: true }`, user decision 2026-10-29, replacing the 60 s timer). With the introduction, this is one of two ungraded stages; time spent in it is logged as a process measure ([14](14-evaluation-methodology.md)) |
 | Data produced | `activity_start`, `select { hotspotId, method: "dwell" }`, `activity_end`, optional `tutor_message` |
 | Tier | **MVP** |
@@ -127,14 +127,14 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | System does | Worker runs the Hand Landmarker at 640×360, One-Euro smoothing, hysteresis on `pinch`/`release`, emits interaction events and the `cv_status` channel at most 4 Hz; the scene never sees landmarks, only the smoothed cursor |
 | Data produced | `gesture_emit { gesture, confidence }` on transitions only, `tracking_lost`, `tracking_regained { durationMs }`, `hand_count`, `perf_sample` inference fields. Never landmarks, never pixels |
 | Tier | **MVP**. Limitation: this is the stage that adds extraneous load in the gesture condition; NASA-TLX and tracking-lost seconds exist to measure it |
-| Mouse difference | The stage does not exist. The mouse adapter in [05 §7](05-3d-interaction.md#7-mouse-and-keyboard-equivalents) produces the identical event stream; the controls strip shows "Click: select, Drag: move, Drag on space: orbit" |
+| Mouse difference | The stage does not exist. The mouse adapter in [05 §7](05-3d-interaction.md#7-mouse-and-keyboard-equivalents) produces the identical event stream; the controls guide shows the same four actions with mouse key caps (Select, Move, Turn, Let go; [11](11-ui-ux.md)) |
 
 ### 10. Feedback
 
 | Aspect | Detail |
 |---|---|
 | Purpose | Tell the learner what their action meant, at the object, within 200 ms, and without leaving the scene |
-| Learner sees and does | A "Perfect fit!" burst for a correct `place` ("That's it!" for other task types), or a feedback card under the mission card for partial and incorrect, plus the scene reaction from the [feedback vocabulary](11-ui-ux.md#feedback-vocabulary): correct snaps and "lands"; incorrect "shrugs" and shows the real name for 2 s ("That is the right ventricle"); partial says "Right part, wrong place". The hint button pulses after an incorrect attempt. The learner may press the "Explain" pill, which requests `explain_mistake` for the last attempt; there is no free-text input in **MVP** |
+| Learner sees and does | A "Perfect fit!" burst for a correct `place` ("That's it!" for other task types), or a feedback card under the mission card for partial and incorrect, plus the scene reaction from the [feedback vocabulary](11-ui-ux.md#feedback-vocabulary): correct snaps and "lands"; incorrect "shrugs" and shows the real name for 2 s ("That is the right ventricle"); partial says "Right part, wrong place". The hint button pulses after an incorrect attempt. In `guided` and `challenge`, every incorrect or partial attempt automatically requests `explain_mistake` (tutor flag on), and the tutor text replaces the feedback card text; there is no "Explain" pill and no free-text input in **MVP** (free-text "Ask tutor" is **V1**) |
 | System does | Deterministic part comes from the engine and never waits on the network; the tutor explanation, if requested or if the hint at the current level is `tutor: true`, is one same-origin round trip to `/api/tutor`, where the template engine runs ([07](07-ai-tutor.md#request-flow)), and is appended when it arrives. If the route fails or the response fails validation, the task's static hint for that level stays in place. The tutor receives `SceneState`, `expect`, and `actual`; it never grades |
 | Data produced | `task_attempt`, `hint_shown { level, source }`, `tutor_message { interactionId, taskId, kind, hintLevel, status, latencyMs, source }` without text |
 | Tier | **MVP**; tutor flag-gated, on for both arms in the pilot per [12](12-mvp-definition.md#basic-ai-tutor) |
@@ -156,8 +156,8 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | Aspect | Detail |
 |---|---|
 | Purpose | Close the loop on objectives, not tasks: which of `obj_identify_chambers`, `obj_place_vessels`, `obj_blood_path` are mastered, and what to do about the rest |
-| Learner sees and does | Results screen: mastery bars with the objective statement and threshold, per-task outcome list, "Review the parts you missed" which reopens the scene with those components highlighted. XP line and badges appear below and smaller (**V1**). In study mode XP is hidden and the screen routes to the post-test, SUS, and TLX |
-| System does | `act_mastery` computes mastery as the weighted mean of latest normalised scores (06 pseudocode); emits unlock decisions; shows the `sessionId` for deletion requests |
+| Learner sees and does | Results screen: per objective, the objective statement, a band medal and a mastery bar; a Review list of missed tasks (skipped or never correct); a next-lesson line from the unlock rule, and, in dev sessions only, "Review the parts you missed", which hides the results and pulses those components in the scene (never in pilot or study sessions, [06](06-learning-engine.md)). XP line and badges appear below and smaller (**V1**). In study sessions XP is not computed at all and the screen routes to the post-test, SUS, and TLX |
+| System does | `act_mastery` computes mastery as the weighted mean of latest normalised scores (06 pseudocode); emits unlock decisions; shows the participant code for export or deletion requests |
 | Data produced | `mastery_computed` ×3, `activity_end`; end-of-session batch flush and JSON download fallback |
 | Tier | **MVP** bars and review; **V1** history and rewards |
 | Mouse difference | None |
@@ -167,8 +167,8 @@ Overview first; detail per stage follows. The learner in every example is the fi
 | Aspect | Detail |
 |---|---|
 | Purpose | Route onward without a dead end, whether or not every objective was mastered |
-| Learner sees and does | Next lesson screen: the unlocked `anatomy.heart.valves_v1` card, or the prerequisite objective to repeat with a one-click return to the relevant activity |
-| System does | Applies `unlock(lesson)`; in **MVP** the second lesson does not exist, so the card reads "Next lesson coming soon" and offers "Review" or "Restart" |
+| Learner sees and does | **V1**: a Next lesson screen with the unlocked `anatomy.heart.valves_v1` card, or the prerequisite objective to repeat with a one-click return to the relevant activity. **MVP**: no separate screen; a line on the results screen states the unlock rule's result and "Next lesson coming soon" |
+| System does | Applies `isLessonMastered` (the unlock rule); in **MVP** the second lesson does not exist, so the results line reads "Next lesson coming soon". "Review the parts you missed" and "Try again" are offered in dev sessions only (never pilot or study, [06](06-learning-engine.md)) |
 | Data produced | None |
 | Tier | **V1** route; **MVP** placeholder |
 | Mouse difference | None |
@@ -246,7 +246,7 @@ The strictest invariant. The worker is in `GRABBING` or `DRAGGING` and sees no h
 
 ### The learner is confused
 
-Confusion has no sensor; it is inferred from absent commitment: no interaction event for 15 s during a task, three or more hovers without a commit in 20 s, or the learner pressing the hint button or the "Explain" pill. The response is quiet: the hint button pulses, the mission card gains "Need a hint?", and the "Explain" pill offers "Want me to explain what to look for?" The hint ladder is offered, not imposed. A requested hint costs the same `hintPenalty` as an earned one so there is no incentive to fail deliberately, and the penalty is small (2 of 10) because hint avoidance is associated with worse learning than hint use. The tutor explains from `expected`, `actual`, and component `description` fields, is labelled as explaining, not grading, and if the `/api/tutor` route fails the task's static hint for that level is shown instead. No learner free text is accepted in **MVP**. In `explore`, 30 s idle repeats the prompt; `introduction` narration cards advance on their own every 7 s, paused while the pointer or hand is over them ([11](11-ui-ux.md)). In `assessment`, 30 s idle shows "There are no hints in this part. Make your best attempt", because pretending help exists would be a dead end. **MVP**; tutor flag-gated.
+Confusion has no sensor; it is inferred from absent commitment: no interaction event for 15 s during a task, three or more hovers without a commit in 20 s, or the learner pressing the hint button. The response is quiet: the hint button pulses and the mission card gains "Need a hint?" The hint ladder is offered, not imposed. A requested hint costs the same `hintPenalty` as an earned one so there is no incentive to fail deliberately, and the penalty is small (2 of 10) because hint avoidance is associated with worse learning than hint use. The tutor explains from `expected`, `actual`, and component `description` fields, is labelled as explaining, not grading, and if the `/api/tutor` route fails the task's static hint for that level is shown instead. No learner free text is accepted in **MVP**. In `explore`, 30 s idle repeats the prompt; `introduction` narration cards advance on their own every 7 s, paused while the pointer or hand is over them ([11](11-ui-ux.md)). In `assessment`, 30 s idle shows "There are no hints in this part. Make your best attempt", because pretending help exists would be a dead end. **MVP**; tutor flag-gated.
 
 | Logged | `hint_shown { taskId, level, source }`, `tutor_message { interactionId, taskId, kind, hintLevel, status, latencyMs, source }`; idle intervals are derived from gaps between `LogEvent.t`, not logged as events |
 |---|---|

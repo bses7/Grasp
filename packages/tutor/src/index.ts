@@ -5,6 +5,7 @@
 
 export type { TutorService, TutorKind, TutorEngine } from "./tutor-service";
 export {
+  TEMPLATE_VERSION,
   TUTOR_ENGINE_DEFAULT,
   HINT_LATENCY_BUDGET_MS,
   MAX_CALLS_PER_ATTEMPT,

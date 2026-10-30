@@ -1,6 +1,6 @@
 # Computer Vision Architecture
 
-This file specifies how a 720p webcam frame becomes an interaction event that the 3D layer can act on: capture, hand detection, landmark extraction, gesture classification, and mapping to scene intent. It fixes the five **MVP** gestures, defers four to **V1**, and defines the signals the CV layer emits when it fails so the learning and UX layers can respond. Everything here runs in the browser; no video frame leaves the device (locked position 2). The content is mostly **MVP**; every numeric threshold is a starting value to be tuned from logged sessions.
+This file specifies how a 720p webcam frame becomes an interaction event that the 3D layer can act on: capture, hand detection, landmark extraction, gesture classification, and mapping to scene intent. It fixes the five **MVP** gestures, defers four to **V1**, and defines the signals the CV layer emits when it fails so the learning and UX layers can respond. Everything here runs in the browser; no video frame leaves the device (locked position 2). The content is mostly **MVP**; every numeric threshold is a starting value to be tuned from logged sessions. Since 2026-10-30, `fist` and the two-hand gestures are also built, but only outside the study ([extra gestures](#extra-gestures-outside-the-study)); pilot and main-study sessions keep the five locked gestures.
 
 ## Pipeline
 
@@ -84,10 +84,10 @@ The brief lists nine candidate gestures. Two of them are names for things alread
 | `pinch` (grab) | **MVP** | Thumb tip touches index tip | `pinchDist = dist3(l[4], l[8]) / handSize < 0.25` | 0, 4, 8, 9 | Presence ≥ 0.6; hold 2 frames | One-Euro on landmarks before `pinchDist`; cursor = midpoint of 4 and 8, unchanged from the pre-pinch cursor so `grab_start` lands where the learner aimed | Hysteresis exit 0.40; `grab_start` only emitted if cursor is over a grabbable component or on empty space (orbit); not emitted when hand box > 60% frame | `grab_start(cursor)`: 3D layer raycasts, locks drag plane at component depth, or begins orbit on empty space |
 | `pinch_drag` | **MVP** | Held pinch while hand moves | `pinch` active and cursor displacement since `grab_start` > 0.01 normalized | As `pinch` | Inherits pinch; hold 1 frame | Cursor One-Euro on midpoint of 4 and 8; `zHintDelta` from change in `handSize` relative to grab-start size, low-pass heavy | Ignore `zHintDelta` when `|delta| < 0.03` (dead zone); clamp per frame | `grab_move(cursor, zHintDelta)`: move on camera-facing drag plane; orbit if nothing grabbed |
 | `release` | **MVP** | Thumb and index separate | `pinch` was active and `pinchDist > 0.40` | 0, 4, 8, 9 | Presence ≥ 0.6; hold 2 frames | Same filtered `pinchDist` | Never emit a socket-eligible `grab_end` from a frame with presence < 0.6 (the same floor the pseudocode applies when filtering hands, so there is no lower band); on tracking loss emit `grab_end` with `reason: "lost"` so the 3D layer settles without snapping | `grab_end(cursor)`: snap to socket if within radius, else settle; reports `place` or `drop` |
-| `fist` | **V1** | All fingers curled, thumb across | `extendedCount == 0 && !thumbExtended` | All 21 | Presence ≥ 0.6; hold 4 frames | One-Euro | Easily confused with a hand turned edge-on; require palm facing camera (palm normal z component < −0.5) | Candidate: reset view or cancel current grab |
+| `fist` | **V1**; built outside the study | All fingers curled, thumb across | `extendedCount == 0 && !thumbExtended`, classified only when `extraGestures` is on; `pinch` still wins | All 21 | Presence ≥ 0.6; hold 4 frames; leaves after 2 non-fist frames | One-Euro; same cursor as every state | Easily confused with a hand turned edge-on; the specified palm-facing-camera check (palm normal z < −0.5) is **not built** (`ponytail` comment in `gesture-fsm.ts`); add it if a side-on curled hand turns the model | Enters `TURNING` from `IDLE` or `HOVER`, even over a part: `model_turn(dx, dy)` per frame turns the whole model |
 | `swipe` | **V1** | Fast lateral hand motion with open palm | `palmCenter` x-velocity > 1.5 frame-widths/s for ≥ 4 frames while `open_palm` | 0, 5, 9, 13, 17 | Presence ≥ 0.6 | Velocity from One-Euro-filtered `palmCenter`; 500 ms refractory after a swipe | Must start from `open_palm` held ≥ 3 frames; ignore if any `pinch` in last 300 ms | Next or previous activity, or model preset view |
 | `wrist_rotate` (rotate) | **V1** | Twist the hand while pinching | `palmNormal` angle about the view axis changes > 15° from grab start | 0, 5, 17 plus pinch landmarks | Presence ≥ 0.6; hold 3 frames | Angle low-passed; hysteresis 15° enter, 8° exit | Only while `GRABBING` with a component held; ignored during orbit; needs palm roughly facing camera | Rotate held component about view axis |
-| `two_hand_scale` | **V1** | Both hands pinching, moving apart or together | Both hands in `pinch`; distance between pinch cursors changes > 5% | Both hands: 0, 4, 8, 9 | Both hands presence ≥ 0.6; hold 3 frames | Inter-cursor distance One-Euro | Both pinches must begin within 500 ms of each other; second hand must be the same person (hand sizes within 25%) | Scale whole model; never individual components |
+| `two_hand_scale` | **V1**; built outside the study | Both hands pinching over the model, moving apart or together; twisting rolls (`two_hand_twist`) | Both hands `pinchDist` below enter 0.25 (exit 0.40 once active); mode fixed at start: primary hand's last `hoveredId` is a part → scale (zoom), else `two_hand_explode`. Separation and angle between the two smoothed, mirrored, aspect-corrected cursors | Both hands: 0, 4, 8, 9 | Both hands presence ≥ 0.6; hold 2 frames (pinch hold) | Per-hand One-Euro on landmarks and cursor; dead zones: separation 1% (`TWO_HAND_ZOOM_DEAD`), angle 0.02 rad (`TWO_HAND_ROLL_DEAD`) | Second hand in range and `handSize` within 25% of the primary (same person). The specified both-pinches-within-500-ms rule is **not built**; a one-hand grab already running is ended by `suspend` (`grab_end` reason `lost`: the part settles in place, never snaps, records no graded place) and its pinch must release before it can grab again | `model_zoom(factor = lastSep / sep)` scales the view of the whole model (camera distance), never individual components; `two_hand_twist` emits `model_turn(roll)` |
 
 ### MVP and postponed set
 
@@ -95,12 +95,29 @@ Locked position 3 fixes the **MVP** set: `open_palm` (neutral cursor), `point` (
 
 | Postponed gesture | Tier | One-line reason |
 |---|---|---|
-| `fist` | **V1** | Confused with an edge-on hand and with a loose pinch; no MVP task needs it (reset has a button) |
+| `fist` | **V1**; built outside the study | Confused with an edge-on hand and with a loose pinch; no MVP task needs it (orbit is `pinch_drag` on empty space). Built 2026-10-30 as "rotate the heart" for dev sessions (`study_phase` `dev`) only |
 | `swipe` | **V1** | Velocity gestures trigger during ordinary repositioning; navigation has HUD buttons in MVP |
-| `wrist_rotate` | **V1** | Depends on `palmNormal`, which depends on noisy `z`; sockets snap rotation so MVP tasks do not need it |
-| `two_hand_scale` | **V1** | Doubles inference cost and failure surface; model scale has no learning value in the heart lesson |
-| `two_hand_explode` | **V1** | Both hands pinching, apart explodes and together reassembles; deferred 2026-10-29 because locked position 3 fixes five MVP gestures, two visible hands roughly double inference, and the explode pose is already reachable by HUD button and X key (the mouse-condition equivalent); confusable with `two_hand_scale` (two pinches, changing distance), so before building it needs a separation rule (e.g. explode only while no component is grabbed, or drop one of the two) plus the same both-pinches-within-500-ms and same-person constraints |
+| `wrist_rotate` | **V1** | Depends on `palmNormal`, which depends on noisy `z`; sockets snap rotation so MVP tasks do not need it. `two_hand_twist` (`model_turn.roll`) turns the whole model instead, outside the study |
+| `two_hand_scale` | **V1**; built outside the study | Roughly 1.6–2× inference while both hands are visible and doubles the failure surface; model scale has no learning value in the heart lesson |
+| `two_hand_explode` | **V1**; built outside the study | Both hands pinching started on empty space: each time separation changes by ≥ 1% (`TWO_HAND_ZOOM_DEAD`, shared with zoom) it emits `model_explode(delta)` with `delta = (sep − lastSep) / startSep`, so the spread is continuous: doubling the starting separation adds +1 (the authored exploded pose), pushing the hands together gives a negative delta; `two_hand_twist` rolls as in `two_hand_scale`. Kept out of the study because locked position 3 fixes five gestures, two visible hands cost 1.6–2× inference, and activities set their own poses, so the free explode has no graded use (its mouse-condition equivalent, the X key, is also off in the study). The confusion with `two_hand_scale` is resolved by the start rule: mode is fixed when both pinches confirm (over a part → scale, empty space → explode) |
 | Pose-based gestures | **Future** | Pose tracking is Future per locked position 2 |
+
+### Extra gestures outside the study
+
+Decision (user 2026-10-30): `fist` (rotate the heart), `two_hand_scale`, `two_hand_explode` and `two_hand_twist` are **on** in dev sessions (`study_phase` `dev`) and **off** in pilot and main-study sessions. The study keeps the five locked gestures, so locked position 3 is unchanged for the study and the tiers stay **V1**. Code: `GestureFsm(extras)` in `packages/vision/src/gesture-fsm.ts`, `TwoHandGesture` in `two-hand.ts`, `VisionPipeline.create(extras)` in `pipeline.ts`, set from `StartVisionOptions.extraGestures` through the worker `init` message. The lesson client passes `extraGestures = studyPhase === "dev"` and the scene's `studyParity = studyPhase !== "dev"` ([05](05-3d-interaction.md)), so study sessions also lose dolly and the X key. The gate fails closed: when the session request fails after consent, the lesson page's unsaved fallback reads the phase from sessionStorage `grasp.consent.phase` (written by the consent form) and treats an unknown value as `pilot`, so `extraGestures` is off and `studyParity` is on.
+
+| Aspect | Rule |
+|---|---|
+| Second hand | The other in-range hand (box 8–60% of frame) whose `handSize` is within 25% of the primary's (`HAND_SIZE_MATCH_FRAC`); it gets its own `FeatureExtractor` |
+| Precedence | While a two-hand gesture is active the one-hand FSM is not stepped; on its start `suspend` ends any grab with `grab_end` reason `lost`, so the part settles in place and never snaps or records a graded place, and rejects the still-held pinch until it releases |
+| Mode | Fixed at start from the primary hand's last `hover_result`: a part → zoom, empty space → explode. `two_hand_twist` is a roll mode active during both |
+| Logging | `model_turn`, `model_zoom`, `model_explode` are never logged; dev sessions are not study data |
+| Defence in depth | The scene also ignores the three `model_*` events under `studyParity`, so a wrong flag on one side cannot leak them into the study |
+| Cost | Two visible hands run the landmark pass twice: roughly 1.6–2× inference. Unmeasured with extras on; the M11 open risk (p95 43.8 ms against 33 ms) makes this the first thing to measure if dev sessions stutter |
+
+Easter egg (**V1**; built outside the study, dev sessions only, never logged, not listed in the controls guide): two quick circles drawn in the air with a neutral or pointing hand emit `spell_circle { clockwise }` (`packages/vision/src/circle.ts`: turning angle around the centroid of the last 2.5 s of cursor points reaches 2 turns, mean radius ≥ 0.04 frame heights, radius spread ≤ 45%, then a 3 s rest). It runs only when `extraGestures` is on and never during a grab, fist turn or two-hand gesture.
+
+Limitations: no palm-facing check on `fist`, no 500 ms both-pinches rule, and the 1% zoom/explode and 0.02 rad roll dead zones are untuned starting values, set by feel in dev sessions.
 
 Challenge to the brief: listing "grab" and "rotate" alongside "pinch" and "wrist rotation" as separate gestures conflates gesture (hand shape) with interaction event (scene intent). This doc keeps them separate because the same `pinch` yields `grab_start` over a component and orbit over empty space, and the learning engine evaluates intents, not hand shapes.
 
@@ -131,6 +148,10 @@ stateDiagram-v2
   LOST --> IDLE: 1 s grace expired, auto release
   IDLE --> NO_HAND: no hand 500 ms
   HOVER --> NO_HAND: no hand 500 ms
+  IDLE --> TURNING: fist 4 frames, extras only
+  HOVER --> TURNING: fist 4 frames, extras only
+  TURNING --> IDLE: non-fist 2 frames
+  TURNING --> NO_HAND: no hand 500 ms
 ```
 
 Rules that the diagram does not show:
@@ -138,11 +159,12 @@ Rules that the diagram does not show:
 - `IDLE` covers both `open_palm` and an unclassified hand. Both show a neutral cursor; only `open_palm` is logged as a gesture so the "unknown gesture" rate can be measured.
 - Every transition requires the hold-frame count for the target state. Hold counts are per-gesture (table above) and are the first thing to tune.
 - `LOST` holds the grabbed component at its last valid position. Regaining within 1 s resumes `DRAGGING` with the drag offset recomputed from the new cursor so the component does not jump. Expiry emits `grab_end` with `reason: "lost"`; the 3D layer must settle, never snap, on that reason.
+- `TURNING` exists only with `extraGestures` ([extra gestures](#extra-gestures-outside-the-study)). Each fist frame emits `model_turn` with the cursor delta since the previous frame (`roll: 0`); leaving emits a `cursor` event. No tracking-loss grace: nothing is held. A two-hand gesture is a separate machine (`TwoHandGesture`) that preempts this one while active.
 - `pinch` evaluated from `IDLE` or `HOVER` emits `grab_start` only if the main thread has reported a grabbable `hoveredId` under the cursor in the last 2 frames, or the cursor is over empty scene (orbit). Over HUD elements nothing is emitted.
 
 ## Interaction-event contract
 
-This is the interface to [05-3d-interaction.md](05-3d-interaction.md). The six shapes from `mediapipe-hands` section 8 are unchanged in name and required fields. Three additive changes are made here and flagged: a `cursor` event for the neutral `open_palm` cursor, a `reason` field on `grab_end`, and a separate `cv_status` channel for failure states. Common fields `t` (worker timestamp) and `confidence` (presence confidence of the primary hand) are added to every interaction event as optional metadata.
+This is the interface to [05-3d-interaction.md](05-3d-interaction.md). The six shapes from `mediapipe-hands` section 8 are unchanged in name and required fields. Three additive changes are made here and flagged: a `cursor` event for the neutral `open_palm` cursor, a `reason` field on `grab_end`, and a separate `cv_status` channel for failure states. Common fields `t` (worker timestamp) and `confidence` (presence confidence of the primary hand) are added to every interaction event as optional metadata. A fourth additive change (2026-10-30): three whole-model events, `model_turn`, `model_zoom`, `model_explode`, emitted only with `extraGestures` and never logged ([extra gestures](#extra-gestures-outside-the-study)).
 
 ```ts
 type Cursor = { x: number; y: number };   // normalized viewport coords, mirrored, clamped 0..1
@@ -155,7 +177,11 @@ type InteractionEvent =
   | { type: "grab_end";   cursor: Cursor; reason: "release" | "lost" }  // reason is additive; "lost" must never snap
   | { type: "tracking_lost" }
   | { type: "tracking_regained" }
-  | { type: "hand_count"; n: number };
+  | { type: "hand_count"; n: number }
+  // Outside the study only (extraGestures); ignored by the scene under studyParity; never logged  (additive)
+  | { type: "model_turn";    dx: number; dy: number; roll: number }  // fist: cursor delta per frame, roll 0; two_hand_twist: roll in rad, dx = dy = 0
+  | { type: "model_zoom";    factor: number }                       // two_hand_scale: camera distance multiplier, < 1 is closer
+  | { type: "model_explode"; delta: number };                       // two_hand_explode: change in spread, 1 = assembled to authored exploded pose (hands at 2× starting separation); negative = together
 
 type EventMeta = { t: number; confidence: number };             // attached to every event (additive)
 
@@ -206,9 +232,9 @@ Hysteresis for pinch: enter at `pinchDist < 0.25`, exit at `pinchDist > 0.40`. W
 |---|---|---|
 | One hand | It is the primary hand regardless of handedness | **MVP** |
 | Two hands, same person | Primary = the hand that was primary last frame; if none, the one with the larger `handSize`. The other hand is ignored for gestures but counted in `hand_count`. Requires `numHands: 2`, which costs roughly 1.6–2× inference time only while both hands are visible; if the 33 ms p95 budget is missed at milestone M4, fall back to `numHands: 1` as stated in the library decision | **MVP** (conditional) |
-| Second person enters frame | Primary stays with the tracked hand; switch only after the primary is lost > 500 ms. `cv_status` hint `show_one_hand` if `hand_count > 1` persists 3 s during a task | **MVP** |
+| Second person enters frame | Primary stays with the tracked hand; switch only after the primary is lost > 500 ms. `cv_status` hint `show_one_hand` if `hand_count > 1` persists 3 s during a task. With `extraGestures` the hand count fed to `cv_status` is capped at 1, so the hint never fires (two hands are expected); `hand_count` events still report the true number | **MVP**; cap outside the study |
 | Handedness | Logged with each `grab_start` for analysis; not used in classification, since mirrored cameras make MediaPipe's label unreliable without correction | **MVP** |
-| Both hands active | Required for `two_hand_scale`; both must pass presence ≥ 0.6 and have `handSize` within 25% of each other | **V1** |
+| Both hands active | Required for `two_hand_scale`, `two_hand_explode` and `two_hand_twist`; both pass presence ≥ 0.6 and the 8–60% box filter, and the second hand's `handSize` is within 25% of the primary's. Built outside the study only ([extra gestures](#extra-gestures-outside-the-study)); roughly 1.6–2× inference while both are visible | **V1**; built outside the study |
 | Two learners collaborating | Multiplayer seam only | **Future** |
 
 Limitation: one webcam cannot tell whose hand is whose. The largest-hand continuity rule is a heuristic that fails when a bystander's hand is closer to the camera than the learner's. The UX layer should show whose hand is tracked (cursor plus a thumbnail outline) so the learner can notice the switch.
@@ -226,7 +252,7 @@ The CV layer detects and reports; it does not render guidance. Pedagogical respo
 | Hand too close | Hand box > 60% frame width for 1 s | `cv_status: "hand_too_close"`, hint `move_back` | Same overlay | **MVP** |
 | Poor lighting or backlighting | Hand detected intermittently: presence confidence mean < 0.7 over 2 s, or detection flickering ≥ 4 times in 2 s, with frame luminance from a 32×18 downsample outside 40–200 | `cv_status: "low_confidence"`, hint `face_the_light` | Lighting guidance; the learner cannot fix this by gesturing better | **MVP** |
 | Tracking lost mid-grab | `GRABBING`/`DRAGGING` and no hand for 500 ms | `tracking_lost`; after 1 s `grab_end` with `reason: "lost"`; `tracking_regained` on return | Freeze the held component visibly; never grade a drop caused by loss | **MVP** |
-| Multiple hands or people | `hand_count > 1` for 3 s during a task | `cv_status: "ok"` with hint `show_one_hand` | Non-blocking notice | **MVP** |
+| Multiple hands or people | `hand_count > 1` for 3 s during a task (study sessions; suppressed with `extraGestures`) | `cv_status: "ok"` with hint `show_one_hand` | Non-blocking notice | **MVP** |
 
 `cv_status` is emitted on change and at most every 250 ms, so the HUD can bind to it directly. Luminance sampling reads a 32×18 downsample of the current bitmap in the worker and discards it; no pixels are retained or sent.
 
@@ -268,6 +294,7 @@ onFrame(bitmap, t):
   candidate  = pinchRule                                  ? "pinch"
              : extended[index] and not extended[middle..pinky] ? "point"
              : extendedCount == 4 and thumbExtended       ? "open_palm"
+             : extras and extendedCount == 0 and not thumbExtended ? "fist"   // outside the study only
              : "unknown"
 
   // 4. Confidence: debounce by hold frames, weight by presence
@@ -288,8 +315,15 @@ onFrame(bitmap, t):
     (IDLE, "point")          -> enter HOVER; emit hover(cursor)
     (HOVER, "point")         -> emit hover(cursor)
     (HOVER, "open_palm" | "unknown") -> enter IDLE; emit cursor(cursor)
+    (IDLE | HOVER, "fist")   -> enter TURNING; turnFrom = cursor                       // extras only
+    (TURNING, "fist")        -> emit model_turn(cursor - turnFrom, roll 0); turnFrom = cursor
+    (TURNING, other) held 2  -> enter IDLE; emit cursor(cursor)
     (IDLE, _)                -> emit cursor(cursor)
   attach { t, confidence } to every emitted event
+
+// With extras, before step 5: if TwoHandGesture is active (both hands pinching 2 frames),
+// it replaces the FSM step: on its first frame fsm.suspend() ends any grab (grab_end reason "lost"); then it emits
+// model_zoom / model_explode / model_turn(roll) as in the gesture table.
 ```
 
 Note the ordering: pinch beats point, which beats open palm. The check uses the hysteresis-aware `pinchRule` so a pinch does not flicker to `point` as the fingers begin to separate.

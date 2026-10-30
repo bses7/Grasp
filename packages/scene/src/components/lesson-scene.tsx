@@ -33,7 +33,7 @@ import type {
 import { Canvas, useThree } from "@react-three/fiber";
 import { tokens } from "@grasp/ui";
 import { memo, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type RefObject } from "react";
-import { Vector3, type Mesh, type MeshBasicMaterial, type MeshStandardMaterial, type Object3D } from "three";
+import { Box3, Euler, Quaternion, Vector3, type Mesh, type MeshBasicMaterial, type MeshStandardMaterial, type Object3D } from "three";
 import type { CameraPose, Transform } from "@grasp/types";
 import { parseGlb } from "../model-loader";
 import { SCENE_CONSTANTS } from "../constants";
@@ -81,7 +81,7 @@ export type LessonSceneProps = {
   assetBaseUrl?: string;
   /** Self-hosted Draco decoder directory; default "/draco/". */
   dracoDecoderPath?: string;
-  /** Disables capabilities listed in STUDY_PARITY_DISABLES (camera dolly). */
+  /** Disables capabilities listed in STUDY_PARITY_DISABLES (camera dolly), X explode and the extra gestures (model_turn, model_zoom, model_explode). */
   studyParity?: boolean;
   reducedMotion?: boolean;
   /** Slow turntable (the introduction), stopped for the rest of the activity by any grab, orbit, key or zoom. */
@@ -120,6 +120,13 @@ const DEMO_TWEEN_MS = 700;
 const DEMO_HOLD_MS = 900;
 /** The camera and its aim sit this far above the model origin, so the model shows a little below centre (over the plinth). */
 const VIEW_LIFT = 1.5;
+/** Tour: how far a presented part comes toward the viewer, and up (scene units). */
+const PRESENT_TOWARD = 9;
+const PRESENT_RISE = 1.5;
+/** Easter egg spin duration. */
+const SPELL_SPIN_MS = 1800;
+/** The two-hand explode can spread the parts this far past the authored exploded pose (1). */
+const SPREAD_MAX = 1.8;
 /** Turntable speed for autoRotate. */
 const SPIN_DEG_PER_S = 12;
 
@@ -136,6 +143,19 @@ const LABEL_STYLE: CSSProperties = {
   pointerEvents: "none",
   whiteSpace: "nowrap",
   display: "none",
+};
+
+/** Gap in px between the model's screen bounds and the label. */
+const LABEL_GAP = 24;
+/** How far in px the label sits above or below its marker, giving the leader its slant. */
+const LABEL_RISE = 36;
+const LEADER_SVG_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  pointerEvents: "none",
+  overflow: "visible",
 };
 
 const CURSOR_STYLE: CSSProperties = {
@@ -162,6 +182,7 @@ export function LessonScene(props: LessonSceneProps) {
   const wheelHandler = useRef<((e: WheelEvent) => void) | undefined>(undefined);
   const cursorEl = useRef<HTMLDivElement>(null);
   const labelEl = useRef<HTMLDivElement>(null);
+  const leaderEl = useRef<SVGPolylineElement>(null);
   // Stable: R3F re-applies a changed camera prop on every render, which would undo the orbit.
   const [cameraOpts] = useState(() => {
     const [x, y, z] = cameraPosition(props.manifest.defaultCamera);
@@ -171,7 +192,7 @@ export function LessonScene(props: LessonSceneProps) {
     <div
       style={{ position: "relative", width: "100%", height: "100%" }}
       tabIndex={0}
-      aria-label="3D scene. Tab to choose a part or marker, Enter to select it, Space to grab or release it, arrow keys to move it or, with nothing held, to turn the model. X explodes, R resets."
+      aria-label={`3D scene. Tab to choose a part or marker, Enter to select it, Space to grab or release it, arrow keys to move it or, with nothing held, to turn the model.${props.studyParity ? "" : " X explodes."} R resets.`}
       onKeyDown={(e) => keyHandler.current?.(e.nativeEvent)}
       onWheel={(e) => wheelHandler.current?.(e.nativeEvent)}
     >
@@ -194,8 +215,12 @@ export function LessonScene(props: LessonSceneProps) {
           wheelHandler={wheelHandler}
           cursorEl={cursorEl}
           labelEl={labelEl}
+          leaderEl={leaderEl}
         />
       </Canvas>
+      <svg style={LEADER_SVG_STYLE} aria-hidden>
+        <polyline ref={leaderEl} fill="none" stroke={tokens.sceneDom.ink} strokeWidth={1.5} strokeLinejoin="round" style={{ display: "none" }} />
+      </svg>
       <div ref={labelEl} style={LABEL_STYLE} aria-hidden />
       {/* Gesture cursor: moved by style.transform from the controller, never by React state. */}
       <div ref={cursorEl} style={CURSOR_STYLE} aria-hidden />
@@ -212,6 +237,7 @@ type ControllerProps = LessonSceneProps & {
   wheelHandler: MutableRefObject<((e: WheelEvent) => void) | undefined>;
   cursorEl: RefObject<HTMLDivElement | null>;
   labelEl: RefObject<HTMLDivElement | null>;
+  leaderEl: RefObject<SVGPolylineElement | null>;
 };
 
 /**
@@ -263,6 +289,12 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     /** Orbit camera pose, and the drag that is turning it (a grab that started on empty space). */
     cam: CameraPose;
     orbit: { start: Ndc; cam0: CameraPose } | null;
+    /** How far the parts are spread toward the exploded pose (0 assembled, 1 the authored pose), by the two-hand explode. */
+    spread: number;
+    /** The part the easter-egg tour has pulled out, and where it was. */
+    presented: { o: Object3D; from: Transform } | null;
+    /** Camera roll from the two-hand twist, radians; R resets it. */
+    roll: number;
     /** Bumped to cancel a running camera tween. */
     camTween: number;
     /** Hint pulses by component id: start time. */
@@ -293,6 +325,9 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     inRange: null,
     cam: { ...manifest.defaultCamera },
     orbit: null,
+    roll: 0,
+    spread: 0,
+    presented: null,
     camTween: 0,
     pulse: new Map(),
     pose: props.pose ?? Object.keys(manifest.poses)[0] ?? "",
@@ -437,23 +472,62 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     if (st.pulse.size) requestAnimationFrame(pulseLoop);
   };
 
-  /** The hotspot label: one DOM element over the marker's projected position. */
+  /**
+   * The hotspot label: one DOM pill outside the model's screen bounds, on the marker's side of the model
+   * centre, joined to the marker by a leader line.
+   * ponytail: bounds are the projected corners of the visible parts' world AABB, loose when the model is
+   * turned; per-pixel silhouette tests if labels sit visibly far out.
+   */
   const drawLabel = (hotspotId: string | null) => {
     const el = props.labelEl.current;
-    if (!el) return;
+    const line = props.leaderEl.current;
+    if (!el || !line) return;
     const m = hotspotId ? st.markers.get(hotspotId) : undefined;
-    if (!m || !isVisible(m)) return void (el.style.display = "none");
-    const p = m.getWorldPosition(new Vector3()).project(camera);
+    if (!m || !isVisible(m)) {
+      el.style.display = "none";
+      line.style.display = "none";
+      return;
+    }
     const { width, height } = live.current.size;
+    const toPx = (v: Vector3) => [((v.x + 1) / 2) * width, ((1 - v.y) / 2) * height] as const;
+    const box = new Box3();
+    for (const o of interactables()) box.expandByObject(o);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      const c = new Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      const [x, y] = toPx(c.project(camera));
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    const [mx, my] = toPx(m.getWorldPosition(new Vector3()).project(camera));
     el.textContent = nameOf(hotspotId!);
     el.style.display = "block";
-    el.style.transform = `translate(${((p.x + 1) / 2) * width + 14}px, ${((1 - p.y) / 2) * height - 12}px)`;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = mx < (minX + maxX) / 2;
+    const lx = Math.min(Math.max(left ? minX - LABEL_GAP - w : maxX + LABEL_GAP, 8), width - w - 8);
+    // Raised or lowered away from the model's vertical centre, so the leader leaves the marker on a slant.
+    const rise = my < (minY + maxY) / 2 ? -LABEL_RISE : LABEL_RISE;
+    const ly = Math.min(Math.max(my + rise - h / 2, 8), height - h - 8);
+    el.style.transform = `translate(${lx}px, ${ly}px)`;
+    // Textbook callout: a slant from the marker to one bend, then straight across into the label.
+    const ex = left ? lx + w : lx;
+    const ey = ly + h / 2;
+    const kx = ex + (left ? LABEL_GAP : -LABEL_GAP);
+    line.style.display = "block";
+    line.setAttribute("points", `${mx},${my} ${kx},${ey} ${ex},${ey}`);
   };
 
   const placeCamera = () => {
     const [x, y, z] = cameraPosition(st.cam);
     camera.position.set(x, y + VIEW_LIFT, z);
     camera.lookAt(0, VIEW_LIFT, 0);
+    camera.rotateZ(st.roll);
     refresh();
   };
 
@@ -612,6 +686,34 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
       moveGrab(st.grab, ndc, camera, e.zHintDelta);
       lightRing(nearestAcceptingSocket(st.grab.object, p.manifest.sockets, st.occupancy, camera.getWorldDirection(new Vector3()))?.id ?? null);
       invalidate();
+    } else if (e.type === "model_turn") {
+      // Extra gestures (outside the study): a fist turns the model anywhere, even over a part; a twist rolls it.
+      if (p.studyParity || p.allowOrbit === false || st.grab) return;
+      st.camTween++;
+      st.spinOff = true;
+      st.cam = orbitFrom(st.cam, { x: 0, y: 0 }, { x: 2 * e.dx, y: -2 * e.dy });
+      st.roll += e.roll;
+      placeCamera();
+    } else if (e.type === "model_zoom") {
+      dollyBy(e.factor);
+    } else if (e.type === "spell_circle") {
+      // Easter egg (dev only): one full turn of the model in the direction the circles were drawn.
+      if (p.studyParity || p.reducedMotion) return;
+      const token = ++st.camTween;
+      st.spinOff = true;
+      const from = st.cam.azimuth;
+      const dir = e.clockwise ? -1 : 1;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        if (token !== st.camTween) return;
+        const k = Math.min(1, (now - t0) / SPELL_SPIN_MS);
+        st.cam = { ...st.cam, azimuth: from + dir * 360 * (1 - (1 - k) ** 3) };
+        placeCamera();
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    } else if (e.type === "model_explode") {
+      spreadBy(e.delta);
     } else if (e.type === "grab_end") {
       if (st.orbit) return void (st.orbit = null);
       const g = st.grab;
@@ -639,12 +741,14 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
    * Tween every part to a named pose: parts the pose lists leave their sockets, the rest return to the
    * assembled transform in their rest socket. Any held part is let go without an event.
    */
-  const setPose = (name: string) => {
+  const setPose = (name: string, instant = false) => {
     const p = live.current.props;
     const pose = p.manifest.poses[name];
     if (!pose) return console.warn(`setPose: no pose "${name}" in ${p.manifest.id}`);
-    const ms = p.reducedMotion ? 0 : SCENE_CONSTANTS.RESET_TWEEN_MS;
+    const ms = p.reducedMotion || instant ? 0 : SCENE_CONSTANTS.RESET_TWEEN_MS;
     st.pose = name;
+    st.spread = name === "exploded" ? 1 : 0;
+    st.presented = null; // the pose tween below moves it back too
     if (st.grab) drawOnTop(st.grab.object, false);
     lightRing(null);
     st.grab = null;
@@ -665,10 +769,30 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
   const reset = () => {
     const p = live.current.props;
     setPose(p.pose ?? Object.keys(p.manifest.poses)[0] ?? "");
+    if (st.roll) {
+      st.roll = 0;
+      placeCamera();
+    }
     p.announce("Scene reset");
   };
 
   /** The worked example: pulse the part and, given a socket, tween it in, hold, and tween it back. */
+  /** Tour: pull `id` straight out toward where `cameraTo(id)` puts the camera (its hotspot's side), a little raised. */
+  const present = (id: string | null) => {
+    const ms = live.current.props.reducedMotion ? 0 : DEMO_TWEEN_MS;
+    if (st.presented) void tweenTo(st.presented.o, st.presented.from, ms, invalidate);
+    st.presented = null;
+    const o = id ? st.objects.get(id) : undefined;
+    if (!o?.parent) return;
+    st.presented = { o, from: { position: o.position.toArray(), rotation: [o.rotation.x, o.rotation.y, o.rotation.z] } as Transform };
+    const hs = live.current.props.manifest.hotspots.find((h) => h.componentId === id)?.id;
+    const m = hs ? st.markers.get(hs) : undefined;
+    const face = m?.parent ? m.getWorldPosition(new Vector3()).sub(m.parent.getWorldPosition(new Vector3())) : camera.position.clone();
+    const toward = new Vector3(...cameraPosition(poseFacing(face.toArray(), st.cam.distance))).setLength(PRESENT_TOWARD);
+    const target = o.parent.worldToLocal(o.getWorldPosition(new Vector3()).add(toward).add(new Vector3(0, PRESENT_RISE, 0)));
+    void tweenTo(o, { position: target.toArray(), rotation: st.presented.from.rotation }, ms, invalidate);
+  };
+
   const demonstrate = (id: string, socketId?: string) => {
     const o = st.objects.get(id);
     const socket = live.current.props.manifest.sockets.find((x) => x.id === socketId);
@@ -692,6 +816,38 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
     const back = p.pose && p.pose !== "exploded" ? p.pose : "assembled";
     setPose(st.pose === "exploded" ? back : "exploded");
     p.announce(st.pose === "exploded" ? "Exploded view" : "Assembled view");
+  };
+
+  /**
+   * Two-hand explode (dev only): move every part along the line from its assembled transform to the exploded
+   * pose, past it up to SPREAD_MAX. Leaving the assembled pose frees the sockets like X does; closing fully
+   * returns to the activity's pose, which restores them.
+   */
+  const spreadBy = (delta: number) => {
+    const p = live.current.props;
+    const ex = p.manifest.poses.exploded;
+    if (!ex || p.studyParity) return;
+    if (st.pose !== "exploded") {
+      if (delta <= 0) return;
+      setPose("exploded", true); // frees the sockets; the direct placement below replaces it at once
+      p.announce("Exploded view");
+      st.spread = 0;
+    }
+    st.spread = Math.min(SPREAD_MAX, Math.max(0, st.spread + delta));
+    if (st.spread === 0) {
+      setPose(p.pose && p.pose !== "exploded" ? p.pose : "assembled");
+      return p.announce("Assembled view");
+    }
+    const q = new Quaternion();
+    for (const [id, o] of st.objects) {
+      const a = st.original.get(id);
+      const b = ex[id] ?? a;
+      if (!a || !b) continue;
+      o.position.set(...a.position).lerp(new Vector3(...b.position), st.spread);
+      o.quaternion.setFromEuler(new Euler(...a.rotation)).slerp(q.setFromEuler(new Euler(...b.rotation)), Math.min(1, st.spread));
+    }
+    invalidate();
+    refresh();
   };
 
   const dollyBy = (factor: number) => {
@@ -773,6 +929,7 @@ const SceneController = memo(function SceneController(props: ControllerProps) {
         else if (cmd.type === "reset") reset();
         else if (cmd.type === "setPose") setPose(cmd.pose);
         else if (cmd.type === "demonstrate") demonstrate(cmd.componentId, cmd.socketId);
+        else if (cmd.type === "present") present(cmd.componentId);
         else if (cmd.type === "cameraTo") cameraTo(cmd.target);
         else if (cmd.type === "setVisible") {
           for (const id of cmd.ids) {

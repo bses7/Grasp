@@ -32,6 +32,8 @@ export type TutorRequest = {
     actual: ActualSummary;
     attemptNo: number;
     hintsUsed: number;
+    /** sequence only: the 1-based step that broke (steps placed before the attempt, plus one). */
+    stepNo?: number;
   } | null;
   /** Positions are rounded to one decimal server-side before prompting. */
   scene: SceneState;

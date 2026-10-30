@@ -74,6 +74,11 @@ export type SceneCommand =
    * part jumps into the socket and back with no tween.
    */
   | { type: "demonstrate"; componentId: string; socketId?: string }
+  /**
+   * Easter-egg tour (dev only): bring one part out of the heart toward the viewer, putting the previous one back;
+   * null puts it back. Occupancy never changes and no scene event is emitted, like `demonstrate`.
+   */
+  | { type: "present"; componentId: string | null }
   /** V1: named clip from the manifest animations[]. */
   | { type: "playAnimation"; animationId: string };
 

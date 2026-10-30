@@ -74,7 +74,7 @@ The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitm
 | Learning evaluation (`evaluate(task, event)`) | Browser, from lesson JSON | Locked position 5: deterministic and declarative. Running it client-side gives instant feedback and works offline. The same `learning` package is isomorphic so the server can recompute mastery from stored attempts in **V1** for integrity. | **MVP** |
 | Mastery computation | Browser (MVP), server recompute (**V1**) | Trivial arithmetic over attempts; a study participant is not an adversary. XP is **V1** per [Gamification](08-gamification.md) and is not computed in MVP. | **MVP** |
 | Session recording and condition capture | Server | Randomisation is done offline by the researcher (blocked list, per `research-protocol`). The researcher enters a pre-assigned session code that encodes the study phase and condition ([format](#session-create-and-resume)); the server validates the code, records `condition` once, and rejects reuse. Nothing random happens on the server. | **MVP** |
-| Tutor hints and mistake explanations | `POST /api/tutor` route handler: validates the `TutorRequest`, enforces the per-session call caps, calls `TemplateTutorService` from `packages/tutor` in-process (templates over the lesson hint ladder and manifest `description`, `relations`, `tags`), writes the `ai_interactions` row, returns the `TutorResponse`. The tutor client emits the `tutor_message` LogEvent on receipt | Locked position 7: deterministic templates, no paid LLM API, no network egress. The engine is pure TypeScript and could run in the browser; it sits behind the route so validation, caps, and `ai_interactions` logging exist in one place. `TUTOR_ENGINE=local` (**V1**, measured) applies only to an app instance running on the lab laptop alongside the model; the hosted deployment always uses `template`. | **MVP** |
+| Tutor hints and mistake explanations | `POST /api/tutor` route handler: validates the `TutorRequest`, checks the cookie and the consent record, loads the task from the lesson by id, enforces the per-session call caps, calls `TemplateTutorService` from `packages/tutor` in-process (templates over the lesson hint ladder and manifest `description`, `relations`, `tags`), writes the `ai_interactions` row, returns a `TutorReply`. The lesson page emits the `tutor_message` LogEvent on receipt | Locked position 7: deterministic templates, no paid LLM API, no network egress. The engine is pure TypeScript and could run in the browser; it sits behind the route so validation, caps, and `ai_interactions` logging exist in one place. `TUTOR_ENGINE=local` (**V1**, measured) applies only to an app instance running on the lab laptop alongside the model; the hosted deployment always uses `template`. | **MVP** |
 | Attempt, progress, and event persistence | Server to Postgres | Research data must survive the tab closing and be exportable per session. | **MVP** |
 | Content (lesson JSON, model manifests) | Repo, imported at build time | One author, few lessons, versioned with the code. See [content versioning](10-3d-content-system.md#content-versioning). | **MVP** |
 | GLB, Draco decoder, MediaPipe `.task` and WASM | `apps/web/public/` on Vercel, same origin | One heart GLB under 5 MB plus ~10 MB of MediaPipe assets fits Vercel's static hosting and edge cache; same origin keeps CSP simple; versions are pinned in the repo. | **MVP** |
@@ -102,45 +102,56 @@ The trust boundary is the HTTP line between the two subgraphs. Video, `ImageBitm
 
 In the mouse condition, steps 1 to 3 are replaced by the mouse adapter emitting identical `InteractionEvent`s from pointer events. Steps 4 to 11 are byte-for-byte the same, which is what makes the research comparison valid.
 
-### One tutor hint request
+### One tutor call (mistake explanation)
+
+As built in roadmap Phase 5, **MVP**. The example is an incorrect `place` in a guided activity.
 
 ```mermaid
 sequenceDiagram
   participant L as Learner
   participant E as Learning engine
-  participant H as HUD
-  participant T as tutor client
+  participant H as Lesson page (callTutor)
   participant R as POST /api/tutor
-  participant S as TutorService (template, in-process)
+  participant S as TemplateTutorService
   participant P as Postgres
 
   L->>E: place(right_atrium, socket_left_atrium)
   E->>H: EvaluationResult outcome=incorrect, nextHintLevel=2
-  H->>H: hint[2].tutor == true
-  H->>T: buildTutorRequest(kind=hint, taskId, sceneState, attemptSummary)
-  T->>R: TutorRequest (JSON, ~1 KB)
-  R->>R: validate schema, check sessionId, enforce call cap
-  R->>S: hint(req)
-  S->>S: pick template for kind and level; fill from hint ladder, manifest description and relations
-  S-->>R: TutorResponse (text, highlight?)
-  R->>P: insert ai_interactions (engine=template, template_version, status, latency_ms, kind)
-  R-->>T: TutorResponse text, highlight?, interactionId
-  T->>T: emit LogEvent tutor_message { interactionId, taskId, kind, hintLevel, status, latencyMs, source }
-  T->>H: render hint card, pulse highlight
-  H->>E: hintsUsed += 1
-  E->>E: emit LogEvent hint_shown
-  Note over T,P: tutor_message and hint_shown reach Postgres through the logger's /api/events batch, not through /api/tutor
-  Note over R,S: V1 only, after measurement: TUTOR_ENGINE=local on a lab-laptop app instance routes hint(req) to a local open-weights model at TUTOR_LOCAL_URL; the hosted deployment always uses template
+  H->>H: show static feedback, plus any earned hint from authored text (no call)
+  H->>R: TutorRequest kind=explain_mistake (askTutor, 3.5 s timeout)
+  R->>R: Zod-validate body, body sessionId must equal cookie
+  R->>R: load lesson, task and objective by id (body copy not trusted)
+  R->>P: consent_records row, not withdrawn? (else 403)
+  R->>P: count non-capped ai_interactions (caps 1 per attempt, 3 per task, 12 per lesson session)
+  R->>S: explainMistake(req) unless capped
+  S-->>R: TutorResponse, or throws (guardrail)
+  R->>P: insert ai_interactions (engine=template, template_version, status, latency_ms)
+  R-->>H: TutorReply { status, source, interactionId, latencyMs, response }
+  H->>H: source=tutor: replace feedback text for 10 s, pulse highlight
+  H->>H: emit LogEvent tutor_message { interactionId, status, source, taskId, kind, hintLevel, latencyMs }
+  Note over H,P: tutor_message reaches Postgres through the logger's /api/events batch, not through /api/tutor
+  Note over H,R: timeout or network error: static text stays, and tutor_message has status fallback_timeout or fallback_error, interactionId null. Usually no row exists, but the timeout aborts only the client, so a slow route can still insert a late row that the log cannot join
 ```
 
-The tutor never receives video, landmarks, or a verdict to make. It receives the task prompt, the expected and actual event summary already decided by the engine, and the compact `SceneState`. In **MVP** the whole call is a function invocation inside the `/api/tutor` route handler, which validates the request, enforces the call caps, calls `TemplateTutorService`, and writes the `ai_interactions` row: the request leaves the browser only to reach the app's own origin, and nothing leaves the deployment. The tutor client, not the route, emits the `tutor_message` LogEvent on receipt with the payload `{ interactionId, taskId, kind, hintLevel, status, latencyMs, source }` defined in [AI Tutor](07-ai-tutor.md), so the research log carries metadata only and never the hint text. Template design, the manifest fields it may quote, guardrails, and the **V1** local-model measurement gate are owned by [AI Tutor](07-ai-tutor.md).
+When the tutor is called (owned by [AI Tutor](07-ai-tutor.md)):
+
+| Trigger | Calls `/api/tutor`? | Tier |
+|---|---|---|
+| Incorrect or partial attempt in a guided or challenge activity (not the remediation micro-task) | Yes, `kind=explain_mistake` at `feedback.nextHintLevel` | **MVP** |
+| Earned hint after a failed attempt, including a level-2 `tutor: true` hint | No. The authored text is shown; that attempt's `explain_mistake` call covers it | **MVP** |
+| Learner requests a hint with `tutor: true` and no authored `text` | Yes, `kind=hint`. No such hint exists in `chambers_v1`, so this path does not run in the pilot | **MVP** |
+| Correct attempt, assessment activity, unsaved run, `?tutor=off` | No | **MVP** |
+
+The tutor never receives video, landmarks, or a verdict to make. The route rebuilds the task prompt, objective statement, and `expect` from the lesson by id, and takes only the engine's outcome and actual-event summary from the body, plus the compact `SceneState` (bounded at 8,000 characters; the template engine reads none of it). In **MVP** the engine is a function invocation inside the route handler: the request leaves the browser only to reach the app's own origin, and nothing leaves the deployment. A capped call or a guardrail failure answers the static hint (`staticFallback`) with status `capped` or `fallback_invalid`, still with a row. The lesson page, not the route, emits the `tutor_message` LogEvent on every outcome, with scalar fields only, so the research log carries metadata and never the text. Template design, the manifest fields it may quote, guardrails, and the **V1** local-model measurement gate are owned by [AI Tutor](07-ai-tutor.md).
+
+The tutor on/off switch is the `?tutor=off` URL flag, used only for the Phase 5 parity check. It is not recorded per session, because the tutor is on in both study arms and the study build never sets the flag (user decision 2026-10-30). There is no "Explain" button: mistakes are explained automatically, and the 1-per-attempt cap would leave such a button nothing to do (user decision 2026-10-30).
 
 ### What crosses the trust boundary
 
 | Object | Direction | Contents | Never contains |
 |---|---|---|---|
 | `SessionRequest` / `SessionResponse` | both | Create (consent form): `{ sessionId, lessonId, assignmentCode, consent: { version, logging } }`. Resume (lesson page): `{ sessionId, lessonId, condition }`. Response `{ sessionId, resumed, condition, studyPhase, consentLogging, participantCode, lessonHash, contentChanged, elapsedMs, nextSeq, attempts, skipped }`, see [Session create and resume](#session-create-and-resume) | name, email, pre-test scores (MVP has no accounts; randomisation is offline) |
-| `TutorRequest` / `TutorResponse` | both | lesson id, task id, hint level, `SceneState`, attempt summary; returns text and optional highlight ids | video, landmarks, free-text identity |
+| `TutorRequest` / `TutorReply` | both | lesson, activity and task ids, hint level, `SceneState`, engine evaluation summary; returns `TutorReply { status, source, interactionId, latencyMs, response }` with text, referenced and highlight component ids | video, landmarks, free-text identity |
 | `AttemptRow`, `ProgressRow` | up | task id, outcome, score, timing, hints used; per-objective mastery | landmarks |
 | `LogEvent[]` | up | research-protocol event schema | video, images, raw landmark streams |
 | GLB, `.task`, `.wasm`, Draco | down | static assets | anything learner-specific |
@@ -167,7 +178,7 @@ The tutor never receives video, landmarks, or a verdict to make. It receives the
 | FastAPI | **Not used in MVP.** Next.js route handlers (Node runtime) | **MVP** | See [Backend runtime decision](#backend-runtime-nextjs-route-handlers-versus-fastapi) |
 | Authentication | Anonymous research sessions; `sessionId` UUID in an httpOnly cookie | **MVP** | Accounts via Auth.js or Supabase Auth in **V1**; see [Authentication](#authentication) |
 | Learning Engine | Same `packages/learning` imported by route handlers | **MVP** (client) / **V1** (server recompute) | No separate service; it is a library |
-| AI Service | `POST /api/tutor` route handler calling `TemplateTutorService` from `packages/tutor` in-process, behind the `TutorService` interface; `LocalTutorService` (Ollama or WebLLM) is **V1** after measurement | **MVP** | Call-capped per session; logs to `ai_interactions`; no third-party call |
+| AI Service | `POST /api/tutor` route handler calling `TemplateTutorService` from `packages/tutor` in-process, behind the `TutorService` interface; `LocalModelTutorService` (Ollama or WebLLM) is **V1** after measurement | **MVP** | Cookie and consent checked; call-capped per session; logs to `ai_interactions`; no third-party call |
 | Progress Service | `POST /api/attempts` route handler; Drizzle ORM to Postgres. `PUT /api/progress` and the `progress` cache table are **V1**; MVP recomputes mastery from `lesson_attempts` | **MVP** | Tables in [Database Architecture](09-database.md) |
 | Content Service | Static JSON imported at build; GLB in `apps/web/public/` (CDN in **V1**). No route handler | **MVP** | Becomes `GET /api/content/*` over tables in **V1** when an authoring UI exists |
 | Research log ingest | `POST /api/events` batch insert; `DELETE /api/session/:id` | **MVP** | Required by `research-protocol` data rules |
@@ -205,41 +216,30 @@ Eight-point checklist for Next.js route handlers:
 Every server-side capability that a Python service might one day replace is behind a TypeScript interface in `packages/tutor` and `packages/learning`, instantiated once in the route handler. The route handler is the only code that knows which implementation is live.
 
 ```ts
-// packages/tutor/src/service.ts
+// packages/tutor/src/tutor-service.ts (declared identically in doc 07 "Tutor engine")
 export interface TutorService {
-  hint(req: TutorRequest): Promise<TutorResponse>;             // MVP
-  explainMistake(req: TutorRequest): Promise<TutorResponse>;   // MVP
-  summarise?(req: TutorRequest): Promise<TutorResponse>;       // V1, optional
+  /** Return the authored hint at req.hintLevel (level 3 may reveal). MVP. */
+  hint(req: TutorRequest): Promise<TutorResponse>;
+  /** Explain an incorrect or partial attempt without contradicting the engine. MVP. */
+  explainMistake(req: TutorRequest): Promise<TutorResponse>;
+  /** Narrate per-objective mastery for the mastery screen. Optional; V1. */
+  summarise?(req: TutorRequest): Promise<TutorResponse>;
 }
 
-// MVP: deterministic templates over the lesson hint ladder and manifest data; no network
-export class TemplateTutorService implements TutorService { /* ... */ }
+// MVP, built: deterministic templates over the lesson hint ladder and manifest data; no network
+new TemplateTutorService({ manifest, lesson });
 
-// V1, only after the 3.5 s hint and 30 fps budgets are measured: open-weights model
-// running locally (Ollama on the lab laptop behind this route, or WebLLM in the browser)
-export class LocalTutorService implements TutorService {
-  constructor(private baseUrl: string) {}   // TUTOR_LOCAL_URL, lab network, no key
-  /* ... */
-}
+// V1, stub that throws until the 3.5 s hint and 30 fps budgets are measured:
+// open-weights model on the lab laptop (TUTOR_LOCAL_URL); engine column "local:<modelName>"
+new LocalModelTutorService({ baseUrl, modelName });
 
-// V1/Future: forwards the same JSON to a Python service
-export class RemoteTutorService implements TutorService {
-  constructor(private baseUrl: string) {}
-  hint(req) { return postJson(`${this.baseUrl}/tutor/hint`, req); }
-  /* ... */
-}
-
-// app/api/tutor/route.ts: the only place an engine is chosen. The route validates the request,
-// enforces call caps, calls the engine, and writes the ai_interactions row.
-const env = getEnv();                       // TUTOR_ENGINE: "template" | "local"; hosted deployment is always "template"
-const tutor: TutorService = env.TUTOR_SERVICE_URL
-  ? new RemoteTutorService(env.TUTOR_SERVICE_URL)                         // V1/Future
-  : env.TUTOR_ENGINE === "local" && env.TUTOR_LOCAL_URL
-    ? new LocalTutorService(env.TUTOR_LOCAL_URL)                           // V1, measured
-    : new TemplateTutorService();                                          // MVP
+// V1/Future, stub that throws: forwards the same JSON to a Python service (TUTOR_SERVICE_URL)
+new RemoteTutorService({ baseUrl });
 ```
 
-A hosted metered LLM API is never one of the branches; no model vendor name or price appears in this repository. The same pattern applies to a hypothetical `VisionService` (server-side landmark post-processing or a custom gesture classifier) and to server-side mastery recompute. The contract is the JSON types in `packages/types`; a Python service would implement them with Pydantic models generated from the same Zod schemas via JSON Schema. Swapping is an environment variable, not a refactor. The folder placement is in [Project Folder Structure](16-folder-structure.md).
+As built, `apps/web/app/api/tutor/route.ts` has no engine branch: it always constructs `TemplateTutorService` per request, and a `ponytail:` comment in the route records that the `TUTOR_ENGINE=local` and `TUTOR_SERVICE_URL` branches are added with the **V1** local-model gate. The route is still the only place an engine is chosen, so adding them touches that one file.
+
+A hosted metered LLM API is never one of the branches; no model vendor name or price appears in this repository. The same pattern applies to a hypothetical `VisionService` (server-side landmark post-processing or a custom gesture classifier) and to server-side mastery recompute. The contract is the JSON types in `packages/types`; a Python service would implement them with Pydantic models generated from the same Zod schemas via JSON Schema. The **V1** intent is that swapping is an environment variable plus one branch in the route, not a refactor; today there is nothing to swap to. The folder placement is in [Project Folder Structure](16-folder-structure.md).
 
 Limitation stated plainly: `TUTOR_ENGINE=local` applies only to an app instance running on the lab laptop alongside the model; the hosted deployment always uses `template`. A **V1** local model is therefore bounded by the lab laptop's inference speed; if measurement shows it cannot meet the 3.5 s hint budget, the answer is to keep the template engine, not a paid plan or a Python service.
 
@@ -309,7 +309,7 @@ As built in roadmap steps 4.5 (persistence and resume) and 4.6 (consent), **MVP*
 | Concern | Behaviour |
 |---|---|
 | Cookie | `grasp_session`: httpOnly, `SameSite=Strict`, `Max-Age` 30 days, `Secure` in production |
-| Consent text | `apps/web/lib/consent.ts`: `CONSENT_VERSION = "pilot-v1"`, title and paragraphs in the repo, so the wording a participant saw is reproducible from the version; a wording change means a new version. The event-log opt-in is a separate checkbox, unticked by default. `consent_tutor_payloads` is written `false` until the tutor ships (roadmap Phase 5); asking for it then means a new consent version |
+| Consent text | `apps/web/lib/consent.ts`: `CONSENT_VERSION = "pilot-v1"`, title and paragraphs in the repo, so the wording a participant saw is reproducible from the version; a wording change means a new version. The event-log opt-in is a separate checkbox, unticked by default. The form does not ask for tutor payloads, so `consent_tutor_payloads` is always written `false` and the `ai_interactions` payload columns stay null (user decision 2026-10-30): the tutor text is rebuildable from the event log plus `research_sessions.lesson_hash` plus `ai_interactions.template_version`. Asking for it later means a new consent version |
 | Session code format | `<phase><condition>-<number>`: phase `P` pilot, `S` main study, `D` dev; condition `G` gesture, `M` mouse; e.g. `PG-014` (number zero-padded to 3). Parsed by `parseAssignmentCode` in `apps/web/lib/consent.ts`, shared by the form and the route. Dev codes `DG` and `DM` need no number; the route stores them as `<code>-<first 8 of id>` (e.g. `DM-1a2b3c4d`) so the developer can reuse them. The parser also accepts 1–4 digits and an optional hyphen (`pg14` → `PG-014`). The app never randomises |
 | Create request | From the consent form: `{ sessionId, lessonId, assignmentCode, consent: { version, logging } }`; `consent.version` must equal `CONSENT_VERSION`. A malformed code answers 400, a used one 409. A body id already taken gets a fresh server UUID. The form then stores `sessionId` in `localStorage` keyed by lesson and condition, sets the `sessionStorage` flag `grasp.consent`, and opens the lesson in the code's condition |
 | Resume request | From the lesson page: `{ sessionId, lessonId, condition }`. Order: the cookie's session, then the body `sessionId`, each only if that row ran the same lesson in the same condition **and** has a `consent_records` row for its `consent_version`. Otherwise 404 and the page redirects to `/consent`; resume never creates a row |
@@ -348,28 +348,37 @@ The modules communicate through six typed messages, all defined in `packages/typ
 | `SceneEvent` (`select`, `place`, `drop`, with `componentId`, `socketId?`, `hotspotId?`) | R3F scene → learning engine | `r3f-interaction` §3–5; [3D Interaction Architecture](05-3d-interaction.md) | **MVP** |
 | `SceneState` (model id, camera, component occupancy, hovered, grabbed, last event) | R3F scene → `sceneStore` → tutor client | `r3f-interaction` §11 | **MVP** |
 | `EvaluationResult` (`correct`, `partial`, `score`, `feedback.outcome`, `feedback.expected`, `feedback.actual`, `feedback.nextHintLevel`) | Learning engine → HUD, logger, progress client | `lesson-schema` §5; [Learning Engine](06-learning-engine.md) | **MVP** |
-| `TutorRequest` / `TutorResponse` | HUD → `POST /api/tutor` → `TutorService` | Shape below; templates and guardrails in [AI Tutor](07-ai-tutor.md) | **MVP** |
+| `TutorRequest` / `TutorResponse` / `TutorReply` | Lesson page (`askTutor`) → `POST /api/tutor` → `TutorService`; reply back to the lesson page | Shape below; templates and guardrails in [AI Tutor](07-ai-tutor.md) | **MVP** |
 | `LogEvent` | Engine, FSM, HUD → logger → `POST /api/events` | `research-protocol` §4; [Evaluation Methodology](14-evaluation-methodology.md) | **MVP** |
 
-Minimal tutor contract, so that the seam above is concrete:
+Minimal tutor contract, so that the seam above is concrete (abridged from `packages/types/src/tutor.ts` and `apps/web/lib/api-client.ts`; doc 07 owns the field rules):
 
 ```ts
 type TutorRequest = {
-  sessionId: string;            // verified against cookie server-side
-  kind: "hint" | "explain_mistake" | "summary";   // matches ai_interactions.kind in doc 09
-  lessonId: string;             // "anatomy.heart.chambers_v1"
-  taskId?: string;              // "t_g3"
-  hintLevel?: 1 | 2 | 3;
-  sceneState: SceneState;
-  attempt?: { attemptNo: number; outcome: "incorrect" | "partial"; expected: unknown; actual: unknown };
-  locale: string;
+  sessionId: string;            // must equal the cookie's session
+  lessonId: string; activityId: string;
+  kind: "hint" | "explain_mistake" | "question" | "summary";   // MVP sends the first two
+  hintLevel: 1 | 2 | 3;         // from feedback.nextHintLevel
+  task: { id: string; type: TaskType; prompt: string; objectiveStatement: string; expect: TaskExpect }; // route reloads all but id
+  evaluation: { outcome; expected; actual; attemptNo; hintsUsed; stepNo? } | null;   // null for a hint request
+  scene: SceneState;
+  locale: "en";
 };
 
 type TutorResponse = {
-  text: string;                 // <= 60 words for hints, per doc 07
-  highlight?: string[];         // component ids the HUD may pulse
-  cameraTo?: string;            // hotspot or component id
-  interactionId: string;        // ai_interactions.id for later rating
+  kind: "hint" | "explain_mistake" | "answer" | "summary" | "refusal";
+  text: string;                 // <= 320 characters, plain sentences
+  referencedComponentIds: string[];
+  highlight: string[];          // component ids the HUD may pulse; empty at level 1
+  revealsAnswer: boolean;       // false below level 3
+};
+
+type TutorReply = {             // what /api/tutor returns
+  status: "ok" | "capped" | "fallback_invalid";   // the client adds fallback_timeout, fallback_error
+  source: "tutor" | "static";   // "tutor" only when status is ok
+  interactionId: string;        // ai_interactions.id
+  latencyMs: number;
+  response: TutorResponse;
 };
 ```
 
@@ -377,7 +386,7 @@ Rules that the interfaces enforce:
 
 - The engine never imports from `vision` or `scene`; it consumes `SceneEvent` and lesson JSON only, so it runs identically for gesture and mouse conditions and in unit tests.
 - The scene never grades. `place` into a wrong socket is still reported as `place`; the engine decides `partial`.
-- The tutor client is the only module that reads `SceneState` for transmission, and it strips the per-frame `position` arrays to one decimal place to keep payloads near 1 KB.
+- The tutor client (`callTutor` on the lesson page) is the only module that reads `SceneState` for transmission. Positions are already rounded to one decimal place by the scene snapshot (`round3` in `packages/scene/src/scene-state.ts`), which keeps payloads near 1 KB.
 - The logger transport is the only module that calls `/api/events`, and its `LogBuffer` drops everything while the session's `consentLogging` is false; the route repeats the check server-side (see [Session create and resume](#session-create-and-resume)). Only four files call the network at all, which a test asserts (see [15 Browser-side guarantees](15-risks-security-scalability.md#browser-side-guarantees)).
 
 ## Open questions

@@ -160,7 +160,7 @@
     {
       "id": "hs_aorta",
       "componentId": "aorta",
-      "localPosition": [-0.6, 0, 2.93],
+      "localPosition": [1.25, 2.12, -1.07],
       "label": "Aorta",
       "kind": "info",
       "body": "Largest artery; carries oxygenated blood to the body."

@@ -6,6 +6,12 @@
  * the repository: a hosted metered API is never an option.
  */
 
+/**
+ * ai_interactions.template_version. Bump whenever a string in templates.ts or the resolver's wording changes,
+ * so logged tutor text stays reproducible from request_json plus this version (doc 07 "Research angle").
+ */
+export const TEMPLATE_VERSION = "1" as const;
+
 /** Engine selected when TUTOR_LOCAL_URL is not set. */
 export const TUTOR_ENGINE_DEFAULT = "template" as const;
 

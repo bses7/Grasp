@@ -7,7 +7,8 @@
  */
 import type { CvStatus as CvStatusMessage } from "@grasp/types";
 
-export type HandState = "NO_HAND" | "IDLE" | "HOVER" | "GRABBING" | "DRAGGING" | "ORBIT" | "LOST";
+/** FIST, ZOOM, EXPLODE and ROLL come from the extra gestures (dev sessions only). */
+export type HandState = "NO_HAND" | "IDLE" | "HOVER" | "GRABBING" | "DRAGGING" | "ORBIT" | "LOST" | "FIST" | "ZOOM" | "EXPLODE" | "ROLL";
 
 const VIEW: Record<HandState, { glyph: string; text: string }> = {
   NO_HAND: { glyph: "", text: "Looking for your hand" },
@@ -17,6 +18,10 @@ const VIEW: Record<HandState, { glyph: string; text: string }> = {
   DRAGGING: { glyph: "🤏", text: "Moving" },
   ORBIT: { glyph: "🤏", text: "Turning the model" },
   LOST: { glyph: "⚠", text: "Lost your hand" },
+  FIST: { glyph: "✊", text: "Spinning the model" },
+  ZOOM: { glyph: "🙌", text: "Zooming" },
+  EXPLODE: { glyph: "🙌", text: "Exploding" },
+  ROLL: { glyph: "🙌", text: "Rolling the model" },
 };
 
 export function CvStatus({ state, cv }: { state: HandState; cv: CvStatusMessage | null }) {

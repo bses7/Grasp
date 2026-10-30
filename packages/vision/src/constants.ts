@@ -24,6 +24,7 @@ export const VISION_CONSTANTS = {
     pinch: 2,
     pinch_drag: 1,
     release: 2,
+    fist: 4, // extra gesture, outside the study
   },
 
   // One-Euro filters. beta = 5.0 (changed from the 0.007 pixel-unit value; doc 04 smoothing)
@@ -41,7 +42,10 @@ export const VISION_CONSTANTS = {
   PRESENCE_FLOOR: 0.6, // also used for minHandDetectionConfidence and minTrackingConfidence
   HAND_BOX_MIN_FRAC: 0.08, // of frame width; smaller = hand_too_far
   HAND_BOX_MAX_FRAC: 0.6, // of frame width; larger = hand_too_close
-  HAND_SIZE_MATCH_FRAC: 0.25, // two hands must be within this to count as one person (V1)
+  HAND_SIZE_MATCH_FRAC: 0.25, // two hands must be within this to count as one person (extra gestures)
+  // Extra two-hand gestures (outside the study)
+  TWO_HAND_ZOOM_DEAD: 0.01, // fraction of hand separation before a model_zoom or model_explode
+  TWO_HAND_ROLL_DEAD: 0.02, // radians before a model_turn roll
   HOVER_RESULT_MAX_AGE_FRAMES: 2,
 
   // Timing (ms)

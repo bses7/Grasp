@@ -3,7 +3,8 @@
  * lib/logger-transport.ts are the only client code that calls the network (doc 16, package boundaries).
  * Same origin only; the httpOnly session cookie travels with every request.
  */
-import type { AttemptRecord, StudyCondition } from "@grasp/types";
+import { HINT_LATENCY_BUDGET_MS } from "@grasp/tutor";
+import type { AttemptRecord, StudyCondition, TutorCallStatus, TutorRequest, TutorResponse } from "@grasp/types";
 
 export type SessionInfo = {
   sessionId: string;
@@ -65,6 +66,23 @@ export async function restartSession(sessionId: string): Promise<{ sessionId: st
 /** Lesson progress that is not an attempt (PATCH /api/session/:id); keepalive so a skip right before a reload lands. */
 export async function updateSession(sessionId: string, body: { skip: string } | { ended: true }): Promise<void> {
   await ok(await fetch(`/api/session/${sessionId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true }));
+}
+
+/** What POST /api/tutor answers: the tutor's text (source "tutor") or the static hint it fell back to. */
+export type TutorReply = { status: TutorCallStatus; source: "tutor" | "static"; interactionId: string; latencyMs: number; response: TutorResponse };
+
+/**
+ * One tutor call (doc 07 request flow). Times out at HINT_LATENCY_BUDGET_MS with no retry; the caller keeps the
+ * static hint on any rejection.
+ */
+export async function askTutor(req: TutorRequest): Promise<TutorReply> {
+  const res = await fetch("/api/tutor", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(req),
+    signal: AbortSignal.timeout(HINT_LATENCY_BUDGET_MS),
+  });
+  return (await ok(res)).json() as Promise<TutorReply>;
 }
 
 /** Withdraw: delete the session and everything under it (DELETE /api/session/:id). */

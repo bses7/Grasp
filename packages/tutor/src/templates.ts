@@ -63,7 +63,8 @@ export type NarrowKey = keyof typeof NARROW_CLAUSES;
 /** Level-3 reveal sentence; the only templates allowed to use REVEAL_PLACEHOLDERS. */
 export const REVEAL_TEMPLATES: Record<TaskType, string> = {
   identify: "The part you need is the {expectedName}; it is highlighted now.",
-  place: "The {expectedName} belongs in the {restRegion}; its socket is highlighted now.",
+  // The scene pulses components, not sockets, so the part is what lights up.
+  place: "The {expectedName} belongs in the {restRegion}; it is highlighted now.",
   remove: "Detach the {expectedName}; it is highlighted now.",
   sequence: "Step {stepNo} is the {expectedName}; it is highlighted now.",
   compare: "The answer is the {expectedName}; it is highlighted now.",

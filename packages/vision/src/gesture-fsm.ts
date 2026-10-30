@@ -9,10 +9,11 @@ import { VISION_CONSTANTS } from "./constants";
 import type { Point3 } from "./landmarks";
 import { OneEuroFilter } from "./one-euro";
 
-export type GestureState = "NO_HAND" | "IDLE" | "HOVER" | "GRABBING" | "DRAGGING" | "LOST";
+/** TURNING: a held fist turns the whole model (extra gesture, outside the study). */
+export type GestureState = "NO_HAND" | "IDLE" | "HOVER" | "GRABBING" | "DRAGGING" | "LOST" | "TURNING";
 
 /** Candidate gesture after hysteresis, before hold-frame confirmation. */
-export type GestureCandidate = "pinch" | "point" | "open_palm" | "unknown";
+export type GestureCandidate = "pinch" | "point" | "open_palm" | "fist" | "unknown";
 
 /** Per-frame features for the primary hand, already One-Euro filtered and scale-normalised. */
 export type GestureFeatures = {
@@ -33,6 +34,7 @@ const HOLD: Record<GestureCandidate, number> = {
   pinch: H.pinch,
   point: H.point,
   open_palm: H.open_palm,
+  fist: H.fist,
   unknown: H.open_palm,
 };
 
@@ -46,7 +48,7 @@ export class GestureFsm {
 
   private lastHover: HoverResult | null = null;
   private hoverAgeFrames = Infinity;
-  private holdFrames: Record<GestureCandidate, number> = { pinch: 0, point: 0, open_palm: 0, unknown: 0 };
+  private holdFrames: Record<GestureCandidate, number> = { pinch: 0, point: 0, open_palm: 0, fist: 0, unknown: 0 };
   private presentFrames = 0;
   private releaseFrames = 0;
   private noHandSince: number | null = null;
@@ -56,6 +58,27 @@ export class GestureFsm {
   private readonly zHint = new OneEuroFilter(VISION_CONSTANTS.ONE_EURO_Z_HINT);
   /** A pinch refused by the grabbable rule must be released before another can start a grab. */
   private pinchRejected = false;
+  private turnFrom: Cursor = { x: 0.5, y: 0.5 };
+
+  /** @param extras classify `fist` (model_turn); off in study sessions, which keep the five locked gestures */
+  constructor(private readonly extras = false) {}
+
+  /** What the main thread last reported under the cursor (null: empty space or no report yet). */
+  get hoveredId(): string | null {
+    return this.lastHover?.hoveredId ?? null;
+  }
+
+  /**
+   * A two-hand gesture takes over: end any grab and back to IDLE. Reason "lost" so the part settles where it is
+   * and can never snap into a socket as a graded place. The pinch still held must release before it grabs again.
+   */
+  suspend(t: number): InteractionEvent[] {
+    const grabbing = this.state === "GRABBING" || this.state === "DRAGGING" || this.state === "LOST";
+    if (this.state !== "NO_HAND") this.state = "IDLE";
+    this.pinchRejected = true;
+    this.resetHold();
+    return grabbing ? [{ type: "grab_end", cursor: this.lastCursor, reason: "lost", t }] : [];
+  }
 
   /** True in GRABBING, DRAGGING and LOST: the pinch uses the exit threshold (hysteresis). */
   get pinchActive(): boolean {
@@ -96,7 +119,7 @@ export class GestureFsm {
       // Grace expired: auto-release where the hand was last seen. The scene settles, never snaps.
       this.state = "IDLE";
       out.push({ type: "grab_end", cursor: this.lastCursor, reason: "lost", t });
-    } else if ((this.state === "IDLE" || this.state === "HOVER") && gone > NO_HAND_TIMEOUT_MS) {
+    } else if ((this.state === "IDLE" || this.state === "HOVER" || this.state === "TURNING") && gone > NO_HAND_TIMEOUT_MS) {
       this.state = "NO_HAND";
     }
   }
@@ -124,7 +147,10 @@ export class GestureFsm {
         ? "point"
         : f.extendedCount === 4 && f.thumbExtended
           ? "open_palm"
-          : "unknown";
+          : // ponytail: doc 04's palm-faces-camera check is skipped; add it if a side-on curled hand turns the model.
+            this.extras && f.extendedCount === 0 && !f.thumbExtended
+            ? "fist"
+            : "unknown";
 
     const held = this.holdFrames[candidate] + 1;
     this.resetHold();
@@ -136,6 +162,11 @@ export class GestureFsm {
 
     if (this.state === "IDLE" || this.state === "HOVER") {
       if (!pinchRule) this.pinchRejected = false;
+      if (confirmed && candidate === "fist") {
+        this.state = "TURNING";
+        this.turnFrom = f.cursor;
+        return;
+      }
       if (confirmed && candidate === "pinch" && !this.pinchRejected) {
         const grab = this.grabDecision();
         if (grab === "grab") {
@@ -152,6 +183,18 @@ export class GestureFsm {
       if (confirmed && candidate === "point") this.state = "HOVER";
       else if (confirmed && (candidate === "open_palm" || candidate === "unknown")) this.state = "IDLE";
       out.push({ type: this.state === "HOVER" ? "hover" : "cursor", cursor: f.cursor, ...meta });
+      return;
+    }
+
+    if (this.state === "TURNING") {
+      if (candidate !== "fist" && held >= H.release) {
+        this.state = "IDLE";
+        out.push({ type: "cursor", cursor: f.cursor, ...meta });
+        return;
+      }
+      if (candidate !== "fist") return;
+      out.push({ type: "model_turn", dx: f.cursor.x - this.turnFrom.x, dy: f.cursor.y - this.turnFrom.y, roll: 0, ...meta });
+      this.turnFrom = f.cursor;
       return;
     }
 
@@ -181,7 +224,7 @@ export class GestureFsm {
   }
 
   private resetHold(): void {
-    this.holdFrames = { pinch: 0, point: 0, open_palm: 0, unknown: 0 };
+    this.holdFrames = { pinch: 0, point: 0, open_palm: 0, fist: 0, unknown: 0 };
   }
 }
 

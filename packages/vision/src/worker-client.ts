@@ -37,6 +37,8 @@ export type StartVisionOptions = {
   readonly debugFeatures?: boolean;
   /** Post `hands` messages for the camera preview's landmark overlay. */
   readonly showHands?: boolean;
+  /** Fist turn and two-hand gestures: dev and dev sessions only, never pilot or main study. */
+  readonly extraGestures?: boolean;
 };
 
 export type VisionHandle = {
@@ -188,12 +190,12 @@ function startWorker(opts: StartVisionOptions, onFrame: (s: FrameStats) => void)
         opts.onMessage(m);
       }
     };
-    send({ type: "init", debugFeatures: opts.debugFeatures, showHands: opts.showHands });
+    send({ type: "init", debugFeatures: opts.debugFeatures, showHands: opts.showHands, extraGestures: opts.extraGestures });
   });
 }
 
 async function startMainThread(opts: StartVisionOptions, onFrame: (s: FrameStats) => void): Promise<Backend> {
-  const pipeline = await VisionPipeline.create();
+  const pipeline = await VisionPipeline.create(opts.extraGestures ?? false);
   let frame = 0;
   const deliver = (out: PipelineOutput, t: number) => {
     for (const m of out.messages) opts.onMessage(m);

@@ -30,6 +30,17 @@ export type InteractionEvent = EventMeta &
     | { type: "tracking_lost" }
     | { type: "tracking_regained" }
     | { type: "hand_count"; n: number }
+    // Outside the study only (dev and dev sessions; the vision pipeline's `extraGestures`, the scene's
+    // `studyParity`). Never logged: the study keeps the five locked gestures.
+    /** Fist drag (dx, dy in cursor units) and two-hand twist (roll, radians, clockwise on screen) turn the whole model. */
+    | { type: "model_turn"; dx: number; dy: number; roll: number }
+    /** Two-hand pinch over the model, spread or closed: camera distance multiplier (< 1 is closer). */
+    | { type: "model_zoom"; factor: number }
+    /** Two-hand pinch on empty space: pulling apart spreads the parts, pushing together closes them (+1 = the
+     *  authored exploded pose from assembled, reached by doubling the hands' starting separation). */
+    | { type: "model_explode"; delta: number }
+    /** Easter egg: two quick circles drawn in the air (dev sessions only, undocumented in the HUD). */
+    | { type: "spell_circle"; clockwise: boolean }
   );
 
 export type GrabEndReason = "release" | "lost";
@@ -71,4 +82,4 @@ export type HoverResult = {
 /** The five MVP gestures (locked position 3). V1 names are listed so logs can carry them later. */
 export type GestureName =
   | "open_palm" | "point" | "pinch" | "pinch_drag" | "release"
-  | "fist" | "swipe" | "wrist_rotate" | "two_hand_scale";
+  | "fist" | "swipe" | "wrist_rotate" | "two_hand_scale" | "two_hand_explode" | "two_hand_twist";

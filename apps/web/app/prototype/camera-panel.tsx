@@ -33,6 +33,7 @@ const GLYPH: Record<GestureState, { icon: string; label: string }> = {
   GRABBING: { icon: "🤏", label: "pinch" },
   DRAGGING: { icon: "🤏", label: "pinch (dragging)" },
   LOST: { icon: "⚠", label: "tracking lost, holding" },
+  TURNING: { icon: "✊", label: "fist (turning)" },
 };
 
 /** The worker owns the FSM; the panel mirrors its state from the events it emits. */

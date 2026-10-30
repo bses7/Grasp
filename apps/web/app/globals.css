@@ -204,3 +204,85 @@ body {
     display: none;
   }
 }
+
+
+/* ---------- easter-egg tour theme: the mockup's "Mystic sanctum" (dev sessions only, never in the study) ---------- */
+[data-theme="mystic"] {
+  --surface: rgb(18 12 34 / 0.85);
+  --surface-edge: rgb(255 154 46 / 0.55);
+  --track: rgb(255 154 46 / 0.35);
+  --text: #f6ead2;
+  --text-muted: #b5a68a;
+  --accent: #ff8a1f;
+  --accent-ink: #1a0b00;
+  --accent-ledge: #b34d00;
+  --success: #7cf2c4;
+  --success-ink: #7cf2c4;
+  --error: #ff5e4a;
+  --gold: #ffcf6b;
+  --amber-ink: #ffcf6b;
+  --shadow-card: 0 0 0 1px rgb(255 154 46 / 0.55), 0 0 0 5px rgb(255 154 46 / 0.08), 0 0 30px rgb(255 120 20 / 0.22);
+  --font-display: var(--font-cinzel), Georgia, serif;
+  --font-fraunces: var(--font-cinzel); /* Tailwind inlines font-display as var(--font-fraunces) */
+  background: radial-gradient(ellipse at 50% 40%, #1d1438, #07060f 70%);
+  transition: background 600ms;
+}
+[data-theme="mystic"] .card {
+  border-radius: 4px;
+  border-top: 2px solid #ff9a2e;
+  backdrop-filter: blur(6px);
+}
+[data-theme="mystic"] h2 {
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 14px rgb(255 138 31 / 0.5);
+}
+[data-theme="mystic"] .btn {
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 15px;
+  box-shadow: 0 0 0 2px #ffd08a inset, 0 0 22px rgb(255 138 31 / 0.75), 0 0 48px rgb(255 90 0 / 0.35);
+}
+[data-theme="mystic"] .btn-ghost {
+  background: rgb(18 12 34 / 0.6);
+  color: var(--text);
+  box-shadow: 0 0 0 1.5px rgb(255 154 46 / 0.6) inset;
+}
+[data-theme="mystic"] .btn:active {
+  transform: none;
+  box-shadow: 0 0 0 2px #ffd08a inset, 0 0 40px #ff8a1f;
+}
+.sigil {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  translate: -50% -50%;
+  color: #ff9a2e;
+  filter: drop-shadow(0 0 6px #ff7a00) drop-shadow(0 0 18px rgb(255 110 0 / 0.6));
+  animation: turn 40s linear infinite;
+}
+.sigil.s1 { width: min(84vmin, 640px); height: min(84vmin, 640px); opacity: 0.5; }
+.sigil.s2 { width: min(60vmin, 460px); height: min(60vmin, 460px); opacity: 0.35; animation-duration: 26s; animation-direction: reverse; }
+.sigil.s3 { width: 300px; height: 300px; left: 10%; top: 82%; opacity: 0.25; animation-duration: 18s; }
+@keyframes turn {
+  to { rotate: 360deg; }
+}
+.ember {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffcf6b;
+  box-shadow: 0 0 8px 2px #ff7a00;
+  animation: rise 7s linear infinite;
+}
+@keyframes rise {
+  from { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  to { transform: translate(30px, -260px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sigil { animation: none; }
+  .ember { display: none; }
+}

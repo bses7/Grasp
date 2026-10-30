@@ -44,6 +44,7 @@ export function ConsentForm() {
         localStorage.setItem(`grasp.session.${LESSON_ID}.${s.condition}`, s.sessionId);
         sessionStorage.setItem("grasp.consent", CONSENT_VERSION);
         sessionStorage.setItem("grasp.consent.logging", logging ? "1" : "0");
+        sessionStorage.setItem("grasp.consent.phase", s.studyPhase);
       } catch {
         /* private mode: the cookie alone carries the session */
       }

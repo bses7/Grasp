@@ -16,24 +16,39 @@
  * "three hovers without a commit" confusion signal yet; each is additive to this file.
  */
 import { loadLesson, loadManifest } from "@grasp/content";
-import { computeMastery, maxAttemptsFor, SessionLogger, TaskRunner, TIME_PROMPT_MS, type Verdict } from "@grasp/learning";
+import { computeMastery, isLessonMastered, maxAttemptsFor, SessionLogger, TaskRunner, TIME_PROMPT_MS, type Verdict } from "@grasp/learning";
 import { landmarkToNdc, LessonScene, SCENE_CONSTANTS, type CursorSpace, type LessonSceneReadyHandle } from "@grasp/scene";
-import type { CvStatus as CvStatusMessage, Hint, InteractionEvent, SceneEvent } from "@grasp/types";
+import type {
+  CvStatus as CvStatusMessage,
+  Hint,
+  HintLevel,
+  InteractionEvent,
+  ModelManifest,
+  SceneEvent,
+  Task,
+  TutorCallStatus,
+  TutorRequest,
+  TutorResponse,
+} from "@grasp/types";
 import { createMouseAdapter, DRACO_DECODER_URL, VISION_CONSTANTS, type VisionHandle } from "@grasp/vision";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Profiler, useEffect, useReducer, useRef, useState } from "react";
 import { CameraPreview } from "@/components/hud/camera-preview";
 import { CvStatus, type HandState } from "@/components/hud/cv-status";
+import { GestureGuide } from "@/components/hud/gesture-guide";
+import { PORTAL_MS, SparkPortal } from "@/components/hud/spark-portal";
 import { OutcomeIcon, ROLE } from "@/components/hud/feedback-card";
 import { HintCard } from "@/components/hud/hint-card";
-import { ApiError, createSession, postAttempts, restartSession, updateSession, type SessionInfo } from "@/lib/api-client";
+import { ApiError, askTutor, createSession, postAttempts, restartSession, updateSession, type SessionInfo } from "@/lib/api-client";
 import { downloadJson } from "@/lib/download";
 import { createLoggerTransport, type LoggerTransport } from "@/lib/logger-transport";
 
 const ASSET_BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL ?? "/models";
 const VIEWPORT = { videoAspect: VISION_CONSTANTS.CAMERA.width / VISION_CONSTANTS.CAMERA.height };
 const BANNER_MS = 4000;
+/** A tutor explanation is two or three sentences; it stays up longer than the one-line feedback it replaces. */
+const TUTOR_BANNER_MS = 10_000;
 const IDLE_HINT_MS = 15_000;
 const NO_HAND_MS = { task: 3000, introduction: 10_000 };
 const OFFER_MOUSE_MS = { noHand: 20_000, lowLight: 30_000 };
@@ -101,12 +116,15 @@ export function LessonClient({ lessonId }: { lessonId: string }) {
         console.warn("session not saved:", err);
         const sessionId = crypto.randomUUID();
         let logging = false;
+        // Fails closed: an unknown phase runs as a study session (studyParity on, no extra gestures or dev tools).
+        let studyPhase: SessionInfo["studyPhase"] = "pilot";
         try {
           logging = sessionStorage.getItem("grasp.consent.logging") === "1";
+          if (sessionStorage.getItem("grasp.consent.phase") === "dev") studyPhase = "dev";
         } catch {
           /* unknown: treat as declined */
         }
-        setBoot({ sessionId, resumed: false, condition: input, studyPhase: "dev", consentLogging: logging, participantCode: null, lessonHash: "unsaved", elapsedMs: 0, nextSeq: 0, attempts: [], skipped: [], saved: false });
+        setBoot({ sessionId, resumed: false, condition: input, studyPhase, consentLogging: logging, participantCode: null, lessonHash: "unsaved", elapsedMs: 0, nextSeq: 0, attempts: [], skipped: [], saved: false });
       });
     return () => {
       alive = false;
@@ -119,6 +137,10 @@ export function LessonClient({ lessonId }: { lessonId: string }) {
 function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gesture" | "mouse"; boot: Boot }) {
   // ?cells=off for the pre-pilot backdrop measurement (doc 11): blood cells on vs off, same session.
   const cells = useSearchParams().get("cells") !== "off";
+  // The template tutor (doc 07) needs /api/tutor, so an unsaved run keeps static hints. ?tutor=off is the
+  // per-session switch for the Phase 5 parity check (tutor off vs every call capped).
+  // ponytail: a URL flag, not a research_sessions column; move it server-side if a study arm ever turns it off.
+  const tutorOn = useSearchParams().get("tutor") !== "off" && boot.saved;
   // Read once per mount; LessonRun only renders in the browser (after the session request).
   const [reducedMotion] = useState(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [{ lesson, manifest }] = useState(() => {
@@ -143,8 +165,39 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
   const [hintPulse, setHintPulse] = useState(false);
   const [narration, setNarration] = useState(0);
   const [gestureLabel, setGestureLabel] = useState<string | null>(null);
+  /** Easter egg portal (dev only): when it opened, and which way it turns. */
+  const [spell, setSpell] = useState<{ at: number; clockwise: boolean } | null>(null);
   const [remediation, setRemediation] = useState<Verdict | null>(null);
   const [timePrompt, setTimePrompt] = useState(false);
+  /** The missed parts the learner is looking at in the scene, results hidden (dev sessions only). */
+  const [reviewing, setReviewing] = useState<string[] | null>(null);
+  // A hint pulse lasts 3 s (HINT_PULSE_MS); keep the missed parts pulsing for as long as the review is open.
+  useEffect(() => {
+    if (!reviewing) return;
+    const pulse = () => scene.current?.apply({ type: "highlight", ids: reviewing });
+    pulse();
+    const id = setInterval(pulse, 4000);
+    return () => clearInterval(id);
+  }, [reviewing]);
+  /**
+   * Easter-egg tour (dev only, started by the spell): which part is out, in blood-flow order. Each step faces the
+   * part, pulls it out of the heart, pulses it and explains it; it moves on by itself or by Next.
+   */
+  const [tour, setTour] = useState<number | null>(null);
+  const [tourParts] = useState(() => [
+    ...TOUR_ORDER.filter((id) => manifest.components.some((c) => c.id === id)),
+    ...manifest.components.map((c) => c.id).filter((id) => !TOUR_ORDER.includes(id)),
+  ]);
+  useEffect(() => {
+    const id = tour === null ? null : (tourParts[tour] ?? null);
+    scene.current?.apply({ type: "present", componentId: id });
+    if (tour === null) return;
+    if (!id) return setTour(null); // past the last part: everything goes back
+    scene.current?.apply({ type: "cameraTo", target: id });
+    scene.current?.apply({ type: "highlight", ids: [id] });
+    const next = setTimeout(() => setTour((i) => (i === null ? null : i + 1)), TOUR_STEP_MS);
+    return () => clearTimeout(next);
+  }, [tour, tourParts]);
   const [hand, setHand] = useState<HandState>("NO_HAND");
   const handRef = useRef<HandState>("NO_HAND");
   const [cv, setCv] = useState<CvStatusMessage | null>(null);
@@ -424,6 +477,21 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
           mm.noHandSince = null;
         }
         break;
+      case "model_turn":
+        if (!mm.drag) setHandState(e.roll ? "ROLL" : "FIST");
+        break;
+      case "spell_circle":
+        setSpell({ at: t, clockwise: e.clockwise });
+        setTour(null);
+        setTimeout(() => setTour(0), TOUR_START_MS); // after the portal spin
+        setTimeout(() => setSpell((s) => (s?.at === t ? null : s)), PORTAL_MS + 800); // + the last sparks dying out
+        break;
+      case "model_zoom":
+        setHandState("ZOOM");
+        break;
+      case "model_explode":
+        setHandState("EXPLODE");
+        break;
       case "cursor":
       case "hover":
         mm.noHandSince = null;
@@ -455,6 +523,57 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
     if (source === "earned") setHintPulse(true);
     if (h.highlight) scene.current?.apply({ type: "highlight", ids: h.highlight });
     if (h.cameraTo) scene.current?.apply({ type: "cameraTo", target: h.cameraTo });
+    // With authored text the tutor would return that same text and spend a cap slot a later explanation needs
+    // (doc 07: text on every tutor: true hint makes the flag a no-op in MVP).
+    if (source === "requested" && h.tutor && !h.text && r.task && r.activity) {
+      const taskId = r.task.id;
+      callTutor("hint", r.activity.id, r.task, h.level, null, (res) => {
+        if (r.task?.id === taskId) setHint({ ...h, text: res.text });
+      });
+    }
+  }
+
+  /**
+   * One tutor call (doc 07 request flow). The static text is already on screen; `onText` replaces it only when
+   * the tutor answered (source "tutor") and the learner is still on the same task. Every outcome logs tutor_message.
+   */
+  function callTutor(
+    kind: TutorRequest["kind"],
+    activityId: string,
+    task: Task,
+    hintLevel: HintLevel,
+    evaluation: TutorRequest["evaluation"],
+    onText: (res: TutorResponse) => void,
+  ) {
+    if (!tutorOn) return;
+    const started = now();
+    const req: TutorRequest = {
+      sessionId: boot.sessionId,
+      lessonId,
+      activityId,
+      kind,
+      hintLevel,
+      task: { id: task.id, type: task.type, prompt: task.prompt, objectiveStatement: "", expect: task.expect },
+      evaluation,
+      scene: scene.current!.snapshot(),
+      locale: "en",
+    };
+    // Named fields only: /api/events takes scalar payloads, and one object value would reject the whole batch.
+    const logged = ({ interactionId, status, source }: { interactionId: string | null; status: TutorCallStatus; source: "tutor" | "static" }) =>
+      log.log("tutor_message", { interactionId, status, source, taskId: task.id, kind, hintLevel, latencyMs: Math.round(now() - started) }, now());
+    askTutor(req).then(
+      (reply) => {
+        logged(reply);
+        if (reply.source === "tutor") {
+          onText(reply.response);
+          if (reply.response.highlight.length) scene.current?.apply({ type: "highlight", ids: reply.response.highlight });
+        }
+      },
+      (err: unknown) => {
+        const timeout = err instanceof DOMException && err.name === "TimeoutError";
+        logged({ interactionId: null, status: timeout ? "fallback_timeout" : "fallback_error", source: "static" });
+      },
+    );
   }
 
   function onSceneEvent(e: SceneEvent) {
@@ -480,6 +599,7 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
       if (e.cause === "lost") showBanner({ kind: "info", text: "The part was put down where it was." });
     }
 
+    const stepsBefore = r.sequenceProgress;
     const v = r.onSceneEvent({ ...e, t });
     if (!v) {
       if (r.sequenceProgress) render(); // "Step n of m"
@@ -501,7 +621,8 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
       },
       t,
     );
-    const assessed = lesson.activities.find((a) => a.tasks.some((x) => x.id === task.id))?.kind === "assessment";
+    const owner = lesson.activities.find((a) => a.tasks.some((x) => x.id === task.id));
+    const assessed = owner?.kind === "assessment";
     const outcome = result.feedback.outcome;
     if (v.next === "next_task" || v.next === "next_activity" || v.next === "lesson_complete") {
       log.log("task_end", { taskId: task.id, outcome: result.correct ? "correct" : "incorrect" }, t);
@@ -513,6 +634,19 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
       showBanner({ kind: outcome, text: feedbackText(v), at: t, headline: task.type === "place" ? "Perfect fit!" : "That's it!" });
       if (v.hint) applyHint(v.hint, "earned");
       else if (!result.correct && v.next === "retry") setHintPulse(true);
+      // Mistake explanation (doc 07): guided and challenge only, never for the synthesised micro-task.
+      const level = result.feedback.nextHintLevel;
+      if (level && owner && (owner.kind === "guided" || owner.kind === "challenge") && !v.micro) {
+        const { actual } = result.feedback;
+        const evaluation = { outcome, expected: task.expect, actual, attemptNo: v.attemptNo, hintsUsed: r.hintsUsed, ...(task.type === "sequence" && { stepNo: stepsBefore + 1 }) };
+        // Same rule as feedbackText: only when the task advanced (not on retry or remediation).
+        const tail = v.next === "next_task" || v.next === "next_activity" || v.next === "lesson_complete" ? " Moving on." : "";
+        callTutor("explain_mistake", owner.id, task, level, evaluation, (res) => {
+          setBanner((b) => (b?.at === t ? { ...b, text: res.text + tail } : b));
+          clearTimeout(bannerTimer.current);
+          bannerTimer.current = setTimeout(() => setBanner((b) => (b?.at === t ? null : b)), TUTOR_BANNER_MS);
+        });
+      }
     }
     if (v.remediation) setRemediation(v);
     sync();
@@ -583,8 +717,10 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
   return (
     // Keyed on the mode: switching remounts the scene so exactly one adapter is attached.
     <Profiler id="lesson" onRender={() => void (commits.current += 1)}>
-    <main key={input} className="relative h-screen overflow-hidden text-text">
-      <Backdrop cells={cells} />
+    <main key={input} data-theme={tour !== null ? "mystic" : undefined} className="relative h-screen overflow-hidden text-text">
+      <Backdrop cells={cells} mystic={tour !== null} />
+      {/* Easter egg portal, behind the transparent canvas so the heart sits inside the ring. */}
+      {spell && <SparkPortal key={spell.at} clockwise={spell.clockwise} reducedMotion={reducedMotion} />}
       <div className="absolute inset-0">
         <LessonScene
           manifest={manifest}
@@ -593,6 +729,7 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
           allowOrbit={sceneCfg.allowOrbit}
           socketVisual={sceneCfg.socketsVisible === false ? "none" : sceneCfg.socketVisual}
           visibleComponents={sceneCfg.visibleComponents}
+          studyParity={boot.studyPhase !== "dev"}
           showHotspots={activity?.kind === "introduction" || activity?.kind === "explore"}
           autoRotate={activity?.kind === "introduction"}
           reducedMotion={reducedMotion}
@@ -607,7 +744,18 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
       {/* scene-dim (doc 02's 60%) under failure state 1 and every dialog; pointer events pass through. */}
       {(alert?.kind === "no_hand" || dialogOpen) && <div aria-hidden className="pointer-events-none absolute inset-0 bg-[rgb(58_31_43/0.4)]" />}
 
-      <LevelPath activities={lesson.activities} current={r.done ? lesson.activities.length : activity ? lesson.activities.indexOf(activity) : 0} />
+      {/* Level path with the proceed button beside it (user decision 2026-10-30): top centre, clear of the model; hidden during the tour. */}
+      {tour === null && (
+        <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-3">
+          <LevelPath activities={lesson.activities} current={r.done ? lesson.activities.length : activity ? lesson.activities.indexOf(activity) : 0} />
+          {activity && !activity.tasks.length && "continue" in activity.completion && !remediation && !timePrompt && (
+            // Big enough to point at and hold, or pinch.
+            <button type="button" className="btn whitespace-nowrap" onClick={proceed}>
+              {activity.kind === "introduction" ? "Continue →" : "Start the lesson →"}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="absolute top-4 right-4 flex items-center gap-3">
         {!boot.saved && (
@@ -694,19 +842,22 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
         </div>
       )}
 
+      {tour !== null && tourParts[tour] && (
+        <TourCard
+          part={manifest.components.find((c) => c.id === tourParts[tour])!}
+          next={manifest.components.find((c) => c.id === tourParts[tour + 1])?.name ?? null}
+          step={tour + 1}
+          of={tourParts.length}
+          onNext={() => setTour(tour + 1)}
+          onStop={() => setTour(null)}
+        />
+      )}
       {correct && <Burst key={correct.at} headline={correct.headline ?? "Correct!"} sub={correct.text} />}
 
-      {!r.done && !isAssessment && (
+      {!r.done && !isAssessment && tour === null && (
         <div className="absolute top-[92px] right-4">
           <HintCard levels={hintLevels} used={hintsRevealed} hint={hint} pulse={hintPulse} onRequest={requestHint} />
         </div>
-      )}
-
-      {activity && !activity.tasks.length && "continue" in activity.completion && !remediation && !timePrompt && (
-        // On the side, clear of the model; big enough to point at and hold, or pinch.
-        <button type="button" className="btn absolute top-1/2 right-4 -translate-y-1/2 px-7 py-5 text-[20px]" onClick={proceed}>
-          {activity.kind === "introduction" ? "Continue →" : "Start the lesson →"}
-        </button>
       )}
 
       {remediation && (
@@ -742,8 +893,20 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
         </div>
       )}
 
-      {r.done && (
+      {r.done && reviewing && (
+        <button type="button" className="btn absolute top-1/2 right-4 -translate-y-1/2 px-7 py-5 text-[20px]" onClick={() => setReviewing(null)}>
+          ← Back to results
+        </button>
+      )}
+
+      {r.done && !reviewing && (
         <Results lesson={lesson} runner={r} nameOfTask={(id) => lesson.activities.flatMap((a) => a.tasks).find((x) => x.id === id)?.prompt ?? id} participantCode={boot.participantCode}
+          onReview={
+            // Dev sessions only: post-lesson practice would contaminate the post-test (doc 06, doc 12).
+            boot.studyPhase !== "dev"
+              ? undefined
+              : setReviewing
+          }
           onTryAgain={
             boot.studyPhase !== "dev"
               ? undefined
@@ -763,19 +926,13 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
           onDownload={!boot.consentLogging ? undefined : () => downloadJson(`grasp-log-${log.condition}-${log.sessionId.slice(0, 8)}.json`, log.events)} />
       )}
 
-      <footer className="absolute bottom-4 left-1/2 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-full bg-surface px-4 py-2 text-sm text-text-muted opacity-80 shadow-[var(--shadow-card)] hover:opacity-100">
-        {(input === "gesture" ? GESTURE_KEYS : MOUSE_KEYS).map(([key, verb]) => (
-          <span key={verb} className="flex items-center gap-1.5">
-            <b className="rounded-md border border-text-muted px-1.5 font-semibold text-text">{key}</b>
-            {verb}
-          </span>
-        ))}
+      <GestureGuide input={input} hand={cameraOn ? hand : "NO_HAND"} extras={boot.studyPhase === "dev"}>
         {boot.studyPhase === "dev" && (
           <Link className="underline" href={urlFor(input === "mouse" ? "gesture" : "mouse")} prefetch={false}>
             Use {input === "mouse" ? "the camera" : "the mouse"}
           </Link>
         )}
-      </footer>
+      </GestureGuide>
 
       {input === "gesture" && (
         <>
@@ -785,6 +942,7 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
           </div>
           <CameraPreview
             expanded={alert !== null}
+            extraGestures={boot.studyPhase === "dev"}
             onVisionEvent={(e) => interact(e, "camera")}
             onVisionReady={(h, camera) => {
               vision.current = h;
@@ -810,6 +968,17 @@ function LessonRun({ lessonId, input, boot }: { lessonId: string; input: "gestur
   );
 }
 
+/** Easter-egg tour: the path blood takes through the heart; parts not listed follow in manifest order. */
+const TOUR_ORDER = ["right_atrium", "right_ventricle", "pulmonary_artery", "left_atrium", "left_ventricle", "aorta"];
+const TOUR_STEP_MS = 7000;
+const TOUR_START_MS = 1900; // the spell's spin (SPELL_SPIN_MS) plus a beat
+const TAG_LINE: Record<string, string> = {
+  oxygenated: "Carries oxygen-rich blood.",
+  deoxygenated: "Carries oxygen-poor blood.",
+  pulmonary_circuit: "Part of the lung circuit.",
+  systemic_circuit: "Part of the body circuit.",
+  artery: "An artery: it carries blood away from the heart.",
+};
 const KIND_LABEL: Record<string, string> = {
   introduction: "Introduction",
   explore: "Explore",
@@ -817,11 +986,37 @@ const KIND_LABEL: Record<string, string> = {
   challenge: "Challenge",
   assessment: "Final check",
 };
-const GESTURE_KEYS = [["☝ hold", "pick"], ["🤏", "grab"], ["🤏 on empty space", "turn"], ["✋", "let go"]] as const;
-const MOUSE_KEYS = [["Click", "select"], ["Drag", "move"], ["Drag empty or arrows", "turn"], ["Wheel or + −", "zoom"], ["X", "explode"], ["R", "reset"]] as const;
 
 /** CSS backdrop behind the transparent canvas (doc 11 "Backdrop"): plinth and at most four blood cells in the gutters. */
-function Backdrop({ cells }: { cells: boolean }) {
+function Backdrop({ cells, mystic }: { cells: boolean; mystic: boolean }) {
+  if (mystic)
+    return (
+      // Easter-egg tour: the mockup's "Mystic sanctum" backdrop (sigils turning behind the heart, rising embers).
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <svg width="0" height="0" className="absolute">
+          <defs>
+            <path id="runepath" d="M100 22 a78 78 0 1 1 -0.1 0" />
+            <g id="sigil">
+              <circle cx="100" cy="100" r="96" strokeWidth="1.2" />
+              <circle cx="100" cy="100" r="88" strokeWidth=".6" strokeDasharray="2 4" />
+              <circle cx="100" cy="100" r="62" strokeWidth="1" />
+              <circle cx="100" cy="100" r="30" strokeWidth="1.4" />
+              <text fontSize="7" fill="currentColor" stroke="none" letterSpacing="3">
+                <textPath href="#runepath">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ✶ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ✶ ᛇ ᛈ ᛉ ᛊ ᛏ ᛒ ✶ ᛖ ᛗ ᛚ ᛜ ᛞ ᛟ ✶</textPath>
+              </text>
+            </g>
+          </defs>
+        </svg>
+        {["s1", "s2", "s3"].map((k) => (
+          <svg key={k} className={`sigil ${k}`} viewBox="0 0 200 200" fill="none" stroke="currentColor">
+            <use href="#sigil" />
+          </svg>
+        ))}
+        {[18, 30, 46, 62, 78, 88].map((x, i) => (
+          <span key={x} className="ember" style={{ left: `${x}%`, top: `${80 + ((i * 7) % 16)}%`, animationDelay: `${-i * 1.1}s` }} />
+        ))}
+      </div>
+    );
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0">
       <div className="plinth" />
@@ -841,7 +1036,7 @@ function Backdrop({ cells }: { cells: boolean }) {
 function LevelPath({ activities, current }: { activities: ReturnType<typeof loadLesson>["activities"]; current: number }) {
   const done = current >= activities.length;
   return (
-    <nav aria-label="Lesson progress" className="card absolute top-4 left-1/2 flex -translate-x-1/2 items-center px-4 py-2">
+    <nav aria-label="Lesson progress" className="card flex items-center px-4 py-2">
       {activities.map((a, i) => (
         <span key={a.id} className="flex items-center">
           {i > 0 && <span aria-hidden className={`h-1 w-6 ${i <= current ? "bg-success-ink" : "bg-track"}`} />}
@@ -865,6 +1060,29 @@ function LevelPath({ activities, current }: { activities: ReturnType<typeof load
         {done ? `${activities.length} of ${activities.length} stages` : `Stage ${current + 1} of ${activities.length}`}
       </span>
     </nav>
+  );
+}
+
+/** Easter-egg tour card, right column in the hint card's place (the hint card hides during the tour). */
+function TourCard({ part, next, step, of, onNext, onStop }: { part: ModelManifest["components"][number]; next: string | null; step: number; of: number; onNext: () => void; onStop: () => void }) {
+  return (
+    <section role="status" aria-label="Heart tour" className="card absolute top-[92px] right-4 z-10 w-[min(22rem,calc(100%-2rem))] p-5">
+      <p className="text-[11px] font-semibold tracking-wider text-amber-ink uppercase">
+        Heart tour · part {step} of {of}
+      </p>
+      <h2 className="mt-1 font-display text-2xl font-bold">{part.name}</h2>
+      <p className="mt-1">{part.description}</p>
+      <p className="mt-1 text-sm text-text-muted">{part.tags.map((t) => TAG_LINE[t]).filter(Boolean).join(" ")}</p>
+      <p className="mt-2 text-sm font-semibold">{next ? `Next, blood flows on to the ${next}.` : "From here, blood travels out to the whole body."}</p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" className="btn" onClick={onNext}>
+          {next ? "Next →" : "Finish"}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onStop}>
+          Stop tour
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -919,6 +1137,13 @@ function Mascot() {
   );
 }
 
+/** The components a task is about, for "Review the parts you missed". */
+function partsOf(t: Task): string[] {
+  if (t.type === "sequence") return t.expect.steps.map((s) => s.componentId);
+  if (t.type === "compare") return [...t.expect.componentIds];
+  return ([] as string[]).concat(t.expect.componentId);
+}
+
 /** doc 08 mastery bands as result medals (doc 11): icon and word, never colour alone. */
 function band(v: number | null | undefined, threshold: number) {
   if (v === null || v === undefined) return { label: "Not started", icon: "–", cls: "border-2 border-dashed border-text-muted bg-surface text-text-muted" };
@@ -934,6 +1159,7 @@ function Results({
   nameOfTask,
   participantCode,
   onTryAgain,
+  onReview,
   onDownload,
 }: {
   lesson: ReturnType<typeof loadLesson>;
@@ -942,13 +1168,15 @@ function Results({
   participantCode: string | null;
   /** Dev sessions only: start the lesson over in a fresh session. */
   onTryAgain?: () => void;
+  /** Dev sessions only: hide the results and pulse these components in the scene. */
+  onReview?: (componentIds: string[]) => void;
   /** Only with logging consent: without it no event log may leave the page, not even as a download (locked position 2). */
   onDownload?: () => void;
 }) {
   const mastery = computeMastery(runner.attempts, lesson.objectives, lesson);
   const graded = lesson.activities.filter((a) => a.kind === "guided" || a.kind === "challenge" || a.kind === "assessment");
-  const missed = graded
-    .flatMap((a) => a.tasks)
+  const tasks = graded.flatMap((a) => a.tasks);
+  const missed = tasks
     .filter((t) => runner.skipped.includes(t.id) || !runner.attempts.some((x) => x.taskId === t.id && x.outcome === "correct"))
     .map((t) => t.id);
   return (
@@ -983,6 +1211,12 @@ function Results({
           </ul>
         </>
       )}
+      {/* The unlock rule (doc 06 isLessonMastered) surfaced as text; the next lesson itself is V1 (doc 02 stage 13). */}
+      <p className="mt-4 text-center text-sm">
+        {isLessonMastered(mastery, lesson.objectives)
+          ? "Every objective is mastered, so the next lesson is unlocked. Next lesson coming soon."
+          : "Master every objective above to unlock the next lesson. Next lesson coming soon."}
+      </p>
       {participantCode && (
         <p className="mt-5 text-center text-sm text-text-muted">
           Your participant code <strong className="font-display text-xl tracking-widest text-text">{participantCode}</strong>
@@ -991,8 +1225,13 @@ function Results({
         </p>
       )}
       <div className="mt-5 flex flex-wrap justify-center gap-3">
+        {onReview && missed.length > 0 && (
+          <button type="button" className="btn" onClick={() => onReview([...new Set(missed.flatMap((id) => partsOf(tasks.find((t) => t.id === id)!)))])}>
+            Review the parts you missed
+          </button>
+        )}
         {onTryAgain && (
-          <button type="button" className="btn" onClick={onTryAgain}>
+          <button type="button" className={missed.length && onReview ? "btn btn-ghost" : "btn"} onClick={onTryAgain}>
             Try again
           </button>
         )}

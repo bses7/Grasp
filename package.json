@@ -27,8 +27,9 @@
     "db:migrate": "pnpm --filter @grasp/db migrate",
     "db:seed": "tsx scripts/db/seed-dev.ts",
     "db:up": "docker compose -f infrastructure/docker-compose.yml up -d",
-    "db:down": "docker compose -f infrastructure/docker-compose.yml --profile tutor down",
-    "tutor:up": "docker compose -f infrastructure/docker-compose.yml --profile tutor up -d ollama"
+    "db:down": "docker compose -f infrastructure/docker-compose.yml --profile tutor --profile dbui down",
+    "tutor:up": "docker compose -f infrastructure/docker-compose.yml --profile tutor up -d ollama",
+    "db:ui": "docker compose -f infrastructure/docker-compose.yml --profile dbui up -d cloudbeaver"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -20,6 +20,8 @@ export type InitMessage = {
   readonly debugFeatures?: boolean;
   /** Also post each frame's landmarks for the on-screen preview overlay (display only, never logged). */
   readonly showHands?: boolean;
+  /** Fist turn and two-hand gestures (outside the study only). */
+  readonly extraGestures?: boolean;
 };
 
 /** One camera frame; the bitmap is transferred, never copied, and closed after inference. */
@@ -60,7 +62,7 @@ self.onmessage = async (event: MessageEvent<WorkerInbound>): Promise<void> => {
     debugFeatures = message.debugFeatures ?? false;
     showHands = message.showHands ?? false;
     try {
-      pipeline = await VisionPipeline.create();
+      pipeline = await VisionPipeline.create(message.extraGestures ?? false);
       post({ type: "ready", delegate: pipeline.delegate });
     } catch (err) {
       post({ type: "error", message: err instanceof Error ? err.message : String(err) });
